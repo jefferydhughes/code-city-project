@@ -27,6 +27,22 @@ var _typo_map := {
 
 var active_mission: Node = null
 var _running := false
+var _last_code: String = ""
+
+
+func _ready() -> void:
+	if JSBridge:
+		JSBridge.run_pressed.connect(_on_run_pressed)
+		JSBridge.code_changed.connect(_on_code_changed)
+
+
+func _on_run_pressed(code: String) -> void:
+	run_code(code)
+
+
+func _on_code_changed(code: String) -> void:
+	# Store latest code for re-runs; no auto-execute
+	_last_code = code
 
 
 func set_mission(mission: Node) -> void:

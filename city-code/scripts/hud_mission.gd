@@ -187,6 +187,12 @@ func load_step(step: Dictionary) -> void:
 		var starter: String = step.get("starter_code", "")
 		block_editor.set_starter_blocks(starter)
 
+	# Push starter blocks XML to Blockly (web only)
+	if JSBridge:
+		var web_starter: String = step.get("starter_code", "")
+		var xml := _code_to_blockly_xml(web_starter)
+		JSBridge.set_starter_blocks(xml)
+
 
 ## Shows the hint text
 func show_hint() -> void:
@@ -246,6 +252,35 @@ func _style_next_button() -> void:
 
 	next_button.add_theme_color_override("font_color", COLOR_WHITE)
 	next_button.add_theme_color_override("font_hover_color", COLOR_WHITE)
+
+
+## Converts a simple place_building code string to Blockly workspace XML.
+## Only handles place_building() calls — sufficient for Mission 1 starter steps.
+func _code_to_blockly_xml(code: String) -> String:
+	if code.is_empty():
+		return ""
+
+	var blocks_xml := ""
+	var lines := code.split("\n")
+	for line in lines:
+		var stripped := line.strip_edges()
+		if stripped.begins_with("place_building"):
+			var inner := stripped.trim_prefix("place_building(").trim_suffix(")")
+			var parts := inner.split(",")
+			if parts.size() == 3:
+				var btype := parts[0].strip_edges().trim_prefix('"').trim_suffix('"')
+				var col_val := parts[1].strip_edges()
+				var row_val := parts[2].strip_edges()
+				blocks_xml += """
+<block type="place_building">
+  <field name="BUILDING_TYPE">%s</field>
+  <field name="X">%s</field>
+  <field name="Y">%s</field>
+</block>""" % [btype, col_val, row_val]
+
+	if blocks_xml.is_empty():
+		return ""
+	return "<xml xmlns='https://developers.google.com/blockly/xml'>%s</xml>" % blocks_xml
 
 
 ## Inner class for the grid diagram drawn in step 1

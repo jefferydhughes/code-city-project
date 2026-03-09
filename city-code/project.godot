@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 Audio="*res://scripts/audio.gd"
 CodeRunner="*res://scripts/code_runner.gd"
 MissionManager="*res://scripts/mission_manager.gd"
+JSBridge="*res://scripts/js_bridge.gd"
 
 [editor_plugins]
 

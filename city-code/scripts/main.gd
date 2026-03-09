@@ -94,6 +94,13 @@ func _ready() -> void:
 	dialogue_button.pressed.connect(_on_dialogue_dismiss)
 	celebration_button.pressed.connect(_on_celebration_dismiss)
 
+	# Hide native block editor on web — Blockly HTML panel takes over
+	if OS.has_feature("web"):
+		if blocks_scroll:
+			blocks_scroll.visible = false
+		if mode_toggle_bar:
+			mode_toggle_bar.visible = false
+
 	# Setup MissionManager AFTER signals are connected
 	MissionManager.setup(gridmap)
 
