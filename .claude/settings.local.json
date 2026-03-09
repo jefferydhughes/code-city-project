@@ -10,7 +10,21 @@
       "Bash(gh repo:*)",
       "Bash(git push:*)",
       "Bash(git add .gitignore README.md city-code/ .claude/)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(gh auth status)",
+      "Bash(where gh)",
+      "Bash(winget install --id GitHub.cli --accept-source-agreements --accept-package-agreements)",
+      "Bash(cmd.exe //c \"winget install --id GitHub.cli --accept-source-agreements --accept-package-agreements\")",
+      "Bash(powershell.exe -Command \"winget install --id GitHub.cli --accept-source-agreements --accept-package-agreements\")",
+      "Bash(powershell.exe -Command \"Get-Command winget -ErrorAction SilentlyContinue; Get-Command choco -ErrorAction SilentlyContinue; Get-Command scoop -ErrorAction SilentlyContinue\")",
+      "Bash(powershell.exe -Command \"choco install gh -y\")",
+      "Bash(powershell.exe -Command \"& {Invoke-WebRequest -Uri ''https://github.com/cli/cli/releases/download/v2.87.2/gh_2.87.2_windows_amd64.zip'' -OutFile ''$env:TEMP\\\\gh.zip''; Expand-Archive -Path ''$env:TEMP\\\\gh.zip'' -DestinationPath ''$env:USERPROFILE\\\\gh'' -Force; Write-Output ''Done''}\")",
+      "Bash(powershell.exe -Command \"Write-Output $env:TEMP; Write-Output $env:USERPROFILE\")",
+      "Bash(mkdir -p /c/Users/jeff/gh)",
+      "Bash(unzip -o /c/Users/jeff/Downloads/gh.zip -d /c/Users/jeff/gh/)",
+      "Bash(/c/Users/jeff/gh/bin/gh.exe --version)",
+      "Bash(/c/Users/jeff/gh/bin/gh.exe auth status)",
+      "Bash(/c/Users/jeff/gh/bin/gh.exe auth login --web --git-protocol https)"
     ]
   }
 }
