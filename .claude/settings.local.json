@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude:*)",
+      "Bash(python3:*)",
+      "Bash(ls:*)",
+      "Bash(\"C:/Users/jeff/Downloads/Godot_v4.6.1-stable_win64.exe/Godot_v4.6.1-stable_win64_console.exe\":*)",
+      "Bash(\"C:/Users/jeff/Downloads/Godot_v4.6.1-stable_win64_console.exe\":*)",
+      "Bash(./Godot_v4.6.1-stable_win64.exe:*)",
+      "Bash(gh repo:*)",
+      "Bash(git push:*)",
+      "Bash(git add .gitignore README.md city-code/ .claude/)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

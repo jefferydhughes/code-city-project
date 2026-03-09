@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://dxwe8jdcv2vti"
+path="res://.godot/imported/roadStraightBridgeStart.obj-5fc7a115b735ceb9cd5dba3dd50eb4fc.mesh"
+
+[deps]
+
+files=["res://.godot/imported/roadStraightBridgeStart.obj-5fc7a115b735ceb9cd5dba3dd50eb4fc.mesh"]
+
+source_file="res://Assets/city-racetrack/Models/OBJ format/roadStraightBridgeStart.obj"
+dest_files=["res://.godot/imported/roadStraightBridgeStart.obj-5fc7a115b735ceb9cd5dba3dd50eb4fc.mesh", "res://.godot/imported/roadStraightBridgeStart.obj-5fc7a115b735ceb9cd5dba3dd50eb4fc.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://svpsykly10ms"
+path="res://.godot/imported/road-bridge.obj-aaa774f27594e01314d2d55ad5e3470d.mesh"
+
+[deps]
+
+files=["res://.godot/imported/road-bridge.obj-aaa774f27594e01314d2d55ad5e3470d.mesh"]
+
+source_file="res://Assets/city-kit-roads/Models/OBJ format/road-bridge.obj"
+dest_files=["res://.godot/imported/road-bridge.obj-aaa774f27594e01314d2d55ad5e3470d.mesh", "res://.godot/imported/road-bridge.obj-aaa774f27594e01314d2d55ad5e3470d.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

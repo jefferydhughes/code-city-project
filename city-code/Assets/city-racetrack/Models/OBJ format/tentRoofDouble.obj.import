@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://bp1ttojk5urik"
+path="res://.godot/imported/tentRoofDouble.obj-c57f70d4a8e60c701b47d9d1457dd274.mesh"
+
+[deps]
+
+files=["res://.godot/imported/tentRoofDouble.obj-c57f70d4a8e60c701b47d9d1457dd274.mesh"]
+
+source_file="res://Assets/city-racetrack/Models/OBJ format/tentRoofDouble.obj"
+dest_files=["res://.godot/imported/tentRoofDouble.obj-c57f70d4a8e60c701b47d9d1457dd274.mesh", "res://.godot/imported/tentRoofDouble.obj-c57f70d4a8e60c701b47d9d1457dd274.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

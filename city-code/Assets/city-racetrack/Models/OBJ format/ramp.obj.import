@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://bpexy0i0i3bh2"
+path="res://.godot/imported/ramp.obj-da1f503e667ce3155aef66bea02cd8c8.mesh"
+
+[deps]
+
+files=["res://.godot/imported/ramp.obj-da1f503e667ce3155aef66bea02cd8c8.mesh"]
+
+source_file="res://Assets/city-racetrack/Models/OBJ format/ramp.obj"
+dest_files=["res://.godot/imported/ramp.obj-da1f503e667ce3155aef66bea02cd8c8.mesh", "res://.godot/imported/ramp.obj-da1f503e667ce3155aef66bea02cd8c8.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

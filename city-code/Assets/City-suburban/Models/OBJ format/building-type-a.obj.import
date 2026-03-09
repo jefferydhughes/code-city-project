@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://c8tjckujcbsoa"
+path="res://.godot/imported/building-type-a.obj-36c1820985e76d59e1b56d1bdf78493b.mesh"
+
+[deps]
+
+files=["res://.godot/imported/building-type-a.obj-36c1820985e76d59e1b56d1bdf78493b.mesh"]
+
+source_file="res://Assets/City-suburban/Models/OBJ format/building-type-a.obj"
+dest_files=["res://.godot/imported/building-type-a.obj-36c1820985e76d59e1b56d1bdf78493b.mesh", "res://.godot/imported/building-type-a.obj-36c1820985e76d59e1b56d1bdf78493b.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://hd5kb6cvffgd"
+path="res://.godot/imported/roadSide.obj-6922261bcfa745ff68a914cda7e670ea.mesh"
+
+[deps]
+
+files=["res://.godot/imported/roadSide.obj-6922261bcfa745ff68a914cda7e670ea.mesh"]
+
+source_file="res://Assets/city-racetrack/Models/OBJ format/roadSide.obj"
+dest_files=["res://.godot/imported/roadSide.obj-6922261bcfa745ff68a914cda7e670ea.mesh", "res://.godot/imported/roadSide.obj-6922261bcfa745ff68a914cda7e670ea.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false
