@@ -83,6 +83,7 @@ var _coord_overlay: Control = null
 
 
 func _ready() -> void:
+	add_to_group("block_editor")
 	_load_mode_preference()
 	_build_layout()
 	_populate_palette()
@@ -313,20 +314,35 @@ func set_starter_blocks(starter_code: String) -> void:
 	# Clear existing blocks
 	for child in _workspace_container.get_children():
 		child.queue_free()
+	await get_tree().process_frame
 
 	if starter_code.is_empty():
+		_on_workspace_changed()
 		return
 
-	# Simple parser: try to add blocks for place_building calls
 	var lines := starter_code.split("\n")
 	for line in lines:
 		var stripped := line.strip_edges()
 		if stripped.begins_with("place_building"):
-			var block := WorkspaceBlock.new()
-			block.setup(block_definitions[0])  # place_building definition
-			block.block_changed.connect(_on_workspace_changed)
-			block.block_remove_requested.connect(_on_block_remove)
-			_workspace_container.add_child(block)
+			# Parse: place_building("house", 2, 3)
+			var inner := stripped.trim_prefix("place_building(").trim_suffix(")")
+			var parts := inner.split(",")
+			if parts.size() == 3:
+				var btype := parts[0].strip_edges().trim_prefix('"').trim_suffix('"')
+				var col_val := parts[1].strip_edges().to_int()
+				var row_val := parts[2].strip_edges().to_int()
+
+				var block := WorkspaceBlock.new()
+				block.setup(block_definitions[0])  # place_building definition
+				block.block_changed.connect(_on_workspace_changed)
+				block.block_remove_requested.connect(_on_block_remove)
+				_workspace_container.add_child(block)
+
+				# Pre-fill param values after node is in tree
+				await get_tree().process_frame
+				block.set_param_value("type", btype)
+				block.set_param_value("col", col_val)
+				block.set_param_value("row", row_val)
 
 	_on_workspace_changed()
 

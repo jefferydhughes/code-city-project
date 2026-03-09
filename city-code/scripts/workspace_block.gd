@@ -210,6 +210,21 @@ func _on_remove_pressed() -> void:
 	block_remove_requested.emit(self)
 
 
+## Sets a param widget value by param name
+func set_param_value(param_name: String, value) -> void:
+	if _param_widgets.has(param_name):
+		var widget = _param_widgets[param_name]
+		if widget is OptionButton:
+			for i in range(widget.item_count):
+				if widget.get_item_text(i) == str(value):
+					widget.selected = i
+					break
+		elif widget is SpinBox:
+			widget.value = float(value)
+		elif widget is LineEdit:
+			widget.text = str(value)
+
+
 func _on_param_focus_entered(param_name: String) -> void:
 	# Signal that a place_building param is focused (for coordinate overlay)
 	if block_id == "place_building":

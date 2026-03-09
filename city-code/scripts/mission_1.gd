@@ -388,7 +388,7 @@ func _check_step_success() -> void:
 
 		"code_runs":
 			# Any successful code execution passes
-			advance_step()
+			call_deferred("advance_step")
 
 		"specific_buildings":
 			# All required buildings must be placed at exact positions
@@ -404,12 +404,12 @@ func _check_step_success() -> void:
 					all_matched = false
 					break
 			if all_matched and required.size() > 0:
-				advance_step()
+				call_deferred("advance_step")
 
 		"count":
 			# Total buildings placed must meet required_count
 			if placed_buildings.size() >= step.required_count:
-				advance_step()
+				call_deferred("advance_step")
 
 		"type_count":
 			# Total buildings >= required_count AND distinct types >= required_types
@@ -418,7 +418,7 @@ func _check_step_success() -> void:
 				for b in placed_buildings:
 					types[b.type] = true
 				if types.size() >= step.required_types:
-					advance_step()
+					call_deferred("advance_step")
 
 
 ## Returns a valid solution string for autotype

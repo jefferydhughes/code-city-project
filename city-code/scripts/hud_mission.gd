@@ -181,6 +181,12 @@ func load_step(step: Dictionary) -> void:
 	# Next button only on explain steps
 	next_button.visible = (step.type == "explain")
 
+	# Update block editor starter blocks if it exists
+	var block_editor = get_tree().get_first_node_in_group("block_editor")
+	if block_editor and block_editor.has_method("set_starter_blocks"):
+		var starter: String = step.get("starter_code", "")
+		block_editor.set_starter_blocks(starter)
+
 
 ## Shows the hint text
 func show_hint() -> void:
