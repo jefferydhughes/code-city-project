@@ -1,7 +1,13 @@
 extends Node
 
 # CodeRunner — Parses student code line-by-line and dispatches API calls
-# to the active mission node. Supports Lua-style for loops.
+# to the active mission node. Supports:
+# - Lua-style for loops: for i = 1, 5 do ... end
+# - Python-style for loops: for i in range(n): ... (NEW)
+# - Variables: var name = value (NEW)
+# - Arrays: ["a", "b", "c"] and arr[index] (NEW)
+# - If/else conditionals (NEW)
+# - Functions: function name(params): ... (NEW)
 
 signal code_started
 signal code_finished
@@ -10,7 +16,7 @@ signal code_output(message: String)
 signal loop_iteration(var_name: String, value: int, total: int)
 
 # Known API function names students can call
-var known_functions := ["place_building", "print"]
+var known_functions := ["place_building", "print", "get_city_stat"]
 
 # Typo suggestions for common mistakes
 var _typo_map := {
@@ -29,6 +35,12 @@ var active_mission: Node = null
 var _running := false
 var _last_code: String = ""
 
+# Variable storage for the current code run
+var _variables := {}
+
+# User-defined functions storage
+var _user_functions := {}
+
 
 func _ready() -> void:
 	if JSBridge:
@@ -41,7 +53,6 @@ func _on_run_pressed(code: String) -> void:
 
 
 func _on_code_changed(code: String) -> void:
-	# Store latest code for re-runs; no auto-execute
 	_last_code = code
 
 
@@ -56,6 +67,10 @@ func run_code(source: String) -> void:
 
 	code_started.emit()
 	_running = true
+	
+	# Reset state for each run
+	_variables.clear()
+	_user_functions.clear()
 
 	var lines := source.split("\n")
 	var had_error := false
@@ -63,16 +78,17 @@ func run_code(source: String) -> void:
 
 	while i < lines.size():
 		var line_num := i + 1
-		var line := lines[i].strip_edges()
+		var line := lines[i]
+		var stripped := line.strip_edges()
 
 		# Skip empty lines and comments
-		if line.is_empty() or line.begins_with("#") or line.begins_with("--"):
+		if stripped.is_empty() or stripped.begins_with("#") or stripped.begins_with("--"):
 			i += 1
 			continue
 
-		# Check for 'for' loop start
-		if _is_for_loop_start(line):
-			var loop_result = await _execute_for_loop(lines, i)
+		# Check for Lua-style for loop: for i = 1, 5 do
+		if _is_lua_for_loop(stripped):
+			var loop_result = await _execute_lua_for_loop(lines, i)
 			if loop_result.error != "":
 				code_error.emit(loop_result.error, loop_result.error_line)
 				had_error = true
@@ -80,18 +96,67 @@ func run_code(source: String) -> void:
 			i = loop_result.end_index + 1
 			continue
 
-		# Check for stray 'end'
-		if line.to_lower() == "end":
-			code_error.emit("Line %d: Found 'end' without a matching 'for' loop!" % line_num, line_num)
+		# Check for Python-style for loop: for i in range(n):
+		if _is_python_for_loop(stripped):
+			var loop_result = await _execute_python_for_loop(lines, i)
+			if loop_result.error != "":
+				code_error.emit(loop_result.error, loop_result.error_line)
+				had_error = true
+				break
+			i = loop_result.end_index + 1
+			continue
+
+		# Check for if/else conditional
+		if _is_conditional_start(stripped):
+			var cond_result = await _execute_conditional(lines, i)
+			if cond_result.error != "":
+				code_error.emit(cond_result.error, cond_result.error_line)
+				had_error = true
+				break
+			i = cond_result.end_index + 1
+			continue
+
+		# Check for else: (must be standalone)
+		if stripped.to_lower() == "else:":
+			code_error.emit("Line %d: Found 'else:' without a matching 'if'!" % line_num, line_num)
 			had_error = true
 			break
 
+		# Check for stray 'end'
+		if stripped.to_lower() == "end":
+			code_error.emit("Line %d: Found 'end' without a matching block!" % line_num, line_num)
+			had_error = true
+			break
+
+		# Check for variable declaration: var name = value
+		if stripped.begins_with("var "):
+			var var_result = _execute_var_declaration(stripped, line_num)
+			if var_result.error != "":
+				code_error.emit(var_result.error, line_num)
+				had_error = true
+				break
+			i += 1
+			continue
+
+		# Check for function definition: function name(params):
+		if stripped.begins_with("function "):
+			var func_result = _execute_function_definition(lines, i)
+			if func_result.error != "":
+				code_error.emit(func_result.error, line_num)
+				had_error = true
+				break
+			i = func_result.end_index + 1
+			continue
+
+		# Substitute variables in the line before parsing
+		var substituted := _substitute_variables(stripped)
+
 		# Try to parse a function call
-		var result := _parse_function_call(line, line_num)
+		var result := _parse_function_call(substituted, line_num)
 		if result.error != "":
 			code_error.emit(result.error, line_num)
 			had_error = true
-			break  # Stop on first error for kids
+			break
 
 		# Dispatch to active mission
 		if result.func_name != "" and active_mission:
@@ -110,26 +175,354 @@ func run_code(source: String) -> void:
 	_running = false
 
 
-# --- For Loop Support ---
+# ========================================================================
+# VARIABLE SUPPORT
+# ========================================================================
 
-func _is_for_loop_start(line: String) -> bool:
+func _execute_var_declaration(line: String, line_num: int) -> Dictionary:
+	var result := {"error": ""}
+	var rest := line.substr(4).strip_edges()  # Remove "var "
+	
+	# Find the equals sign
+	var eq_pos := rest.find("=")
+	if eq_pos == -1:
+		result.error = "Line %d: Variables need an equals sign. Try: var name = 5" % line_num
+		return result
+	
+	var var_name := rest.substr(0, eq_pos).strip_edges()
+	var value_str := rest.substr(eq_pos + 1).strip_edges()
+	
+	# Validate variable name
+	if var_name.is_empty():
+		result.error = "Line %d: Give your variable a name!" % line_num
+		return result
+	
+	if not _is_valid_var_name(var_name):
+		result.error = "Line %d: Variable names can't have spaces or special characters. Try: myVar" % line_num
+		return result
+	
+	# Evaluate the value (could be a number, string, or expression)
+	var value = _evaluate_expression(value_str, line_num)
+	if value is Dictionary and value.has("error"):
+		result.error = value.error
+		return result
+	
+	_variables[var_name] = value
+	return result
+
+
+func _is_valid_var_name(name: String) -> bool:
+	if name.is_empty():
+		return false
+	for i in name.length():
+		var c := name[i]
+		if i == 0:
+			if not (c >= "a" and c <= "z") and not (c >= "A" and c <= "Z") and c != "_":
+				return false
+		else:
+			if not (c >= "a" and c <= "z") and not (c >= "A" and c <= "Z") and not (c >= "0" and c <= "9") and c != "_":
+				return false
+	return true
+
+
+func _substitute_variables(line: String) -> String:
+	# Substitute variable references with their values
+	var result := ""
+	var i := 0
+	
+	while i < line.length():
+		var c := line[i]
+		
+		# Skip strings
+		if c == "\"" or c == "'":
+			result += c
+			i += 1
+			var string_char := c
+			while i < line.length() and line[i] != string_char:
+				result += line[i]
+				i += 1
+			if i < line.length():
+				result += line[i]
+				i += 1
+			continue
+		
+		# Check if this could be a variable name
+		if (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or c == "_":
+			var start := i
+			while i < line.length() and _is_ident_char(line[i]):
+				i += 1
+			var name := line.substr(start, i - start)
+			
+			# Check if it's a variable
+			if _variables.has(name):
+				var value = _variables[name]
+				if value is int or value is float:
+					result += str(value)
+				else:
+					result += name  # Keep as-is for strings/arrays
+			else:
+				result += name
+		else:
+			result += c
+			i += 1
+	
+	return result
+
+
+func _evaluate_expression(expr: String, line_num: int) -> Variant:
+	expr = expr.strip_edges()
+	
+	# Empty expression
+	if expr.is_empty():
+		return 0
+	
+	# String literal
+	if (expr.begins_with("\"") and expr.ends_with("\"")) or \
+	   (expr.begins_with("'") and expr.ends_with("'")):
+		return expr.substr(1, expr.length() - 2)
+	
+	# Array literal
+	if expr.begins_with("[") and expr.ends_with("]"):
+		return _parse_array_literal(expr, line_num)
+	
+	# Boolean
+	if expr.to_lower() == "true":
+		return true
+	if expr.to_lower() == "false":
+		return false
+	
+	# Simple math expression
+	if _is_math_expression(expr):
+		return _evaluate_math(expr, line_num)
+	
+	# Variable reference
+	if _variables.has(expr):
+		return _variables[expr]
+	
+	# Number
+	if expr.is_valid_int():
+		return expr.to_int()
+	if expr.is_valid_float():
+		return expr.to_float()
+	
+	return {"error": "Line %d: I don't understand '%s'" % [line_num, expr]}
+
+
+func _parse_array_literal(expr: String, line_num: int) -> Array:
+	var result := []
+	var inner := expr.substr(1, expr.length() - 2)  # Remove [ and ]
+	var parts := inner.split(",")
+	for part in parts:
+		var val = _evaluate_expression(part, line_num)
+		if not (val is Dictionary and val.has("error")):
+			result.append(val)
+	return result
+
+
+func _is_math_expression(expr: String) -> bool:
+	for op in [" + ", " - ", " * ", " / ", "%"]:
+		if expr.find(op) != -1:
+			return true
+	return false
+
+
+func _evaluate_math(expr: String, line_num: int) -> Variant:
+	# Handle operators in order: * / % + -
+	var ops := [" * ", " / ", " % ", " + ", " - "]
+	for op in ops:
+		var pos := expr.find(op)
+		if pos != -1:
+			var left_str := expr.substr(0, pos).strip_edges()
+			var right_str := expr.substr(pos + op.length()).strip_edges()
+			
+			var left = _evaluate_simple_value(left_str, line_num)
+			var right = _evaluate_simple_value(right_str, line_num)
+			
+			if left is Dictionary and left.has("error"):
+				return left
+			if right is Dictionary and right.has("error"):
+				return right
+			
+			match op:
+				" * ": return int(left) * int(right)
+				" / ":
+					if int(right) == 0:
+						return {"error": "Line %d: Can't divide by zero!" % line_num}
+					return int(left) / int(right)
+				" % ":
+					if int(right) == 0:
+						return {"error": "Line %d: Can't divide by zero!" % line_num}
+					return int(left) % int(right)
+				" + ": return int(left) + int(right)
+				" - ": return int(left) - int(right)
+	
+	return {"error": "Line %d: Can't calculate '%s'" % [line_num, expr]}
+
+
+func _evaluate_simple_value(expr: String, line_num: int) -> Variant:
+	expr = expr.strip_edges()
+	
+	if _variables.has(expr):
+		return _variables[expr]
+	if expr.is_valid_int():
+		return expr.to_int()
+	if expr.is_valid_float():
+		return expr.to_float()
+	
+	return {"error": "Line %d: Unknown value '%s'" % [line_num, expr]}
+
+
+# ========================================================================
+# PYTHON-STYLE FOR LOOP: for i in range(n):
+# ========================================================================
+
+func _is_python_for_loop(line: String) -> bool:
+	var lower := line.to_lower().strip_edges()
+	return lower.begins_with("for ") and lower.find(" in range(") != -1 and lower.ends_with(":")
+
+
+func _execute_python_for_loop(lines: PackedStringArray, start_index: int) -> Dictionary:
+	var result := {"error": "", "error_line": start_index + 1, "end_index": start_index}
+	var line := lines[start_index].strip_edges()
+	var line_num := start_index + 1
+
+	# Parse: for VAR in range(N):
+	var lower := line.to_lower()
+	
+	# Extract variable name
+	var for_start := 4  # Skip "for "
+	var in_pos := lower.find(" in range(")
+	if in_pos == -1:
+		result.error = "Line %d: For loops need 'in range()'. Try: for i in range(5):" % line_num
+		return result
+	
+	var var_name := line.substr(for_start, in_pos - for_start).strip_edges()
+	
+	# Extract range argument
+	var range_start := in_pos + 10  # Skip " in range("
+	var range_end := line.rfind("):")
+	if range_end == -1 or range_end < range_start:
+		result.error = "Line %d: For loops need parentheses. Try: for i in range(5):" % line_num
+		return result
+	
+	var range_arg := line.substr(range_start, range_end - range_start).strip_edges()
+	
+	# Evaluate range argument
+	var range_val = _evaluate_expression(range_arg, line_num)
+	if range_val is Dictionary and range_val.has("error"):
+		result.error = range_val.error
+		return result
+	
+	var iterations := int(range_val)
+	
+	if iterations > 20:
+		result.error = "Line %d: That's too many loops! Keep it under 20 to avoid a traffic jam." % line_num
+		return result
+	
+	if iterations <= 0:
+		result.error = "Line %d: The range should be bigger than 0. Try range(5) for 5 items." % line_num
+		return result
+
+	# Find the indented body (lines with more indentation than the for statement)
+	var base_indent := _get_line_indent(lines[start_index])
+	var body_lines := []
+	var body_line_nums := []
+	var end_index := start_index + 1
+	
+	while end_index < lines.size():
+		var body_line := lines[end_index]
+		if body_line.strip_edges().is_empty():
+			end_index += 1
+			continue
+		
+		var body_indent := _get_line_indent(body_line)
+		if body_indent <= base_indent and not body_line.strip_edges().begins_with("#"):
+			break  # End of block
+		
+		if not body_line.strip_edges().begins_with("#") and not body_line.strip_edges().is_empty():
+			body_lines.append(body_line.strip_edges())
+			body_line_nums.append(end_index + 1)
+		end_index += 1
+	
+	result.end_index = end_index - 1
+	
+	if body_lines.is_empty():
+		result.error = "Line %d: The loop body is empty! Add some code after the for line." % line_num
+		return result
+
+	# Execute loop body for each iteration
+	for iter_val in range(iterations):
+		loop_iteration.emit(var_name, iter_val, iterations)
+		code_output.emit("Running loop: %s = %d" % [var_name, iter_val])
+		
+		for bi in range(body_lines.size()):
+			var body_line := body_lines[bi]
+			var body_line_num := body_line_nums[bi]
+			
+			# Substitute loop variable
+			var substituted := _substitute_loop_var(body_line, var_name, iter_val)
+			substituted = _substitute_variables(substituted)
+			
+			# Handle nested loops and conditionals in body
+			if _is_python_for_loop(substituted):
+				var nested_result = await _execute_python_for_loop(body_lines, bi)
+				if nested_result.error != "":
+					result.error = nested_result.error
+					result.error_line = nested_result.error_line
+					return result
+				bi = nested_result.end_index
+				continue
+			
+			if _is_conditional_start(substituted):
+				var cond_result = await _execute_conditional(body_lines, bi)
+				if cond_result.error != "":
+					result.error = cond_result.error
+					result.error_line = cond_result.error_line
+					return result
+				bi = cond_result.end_index
+				continue
+			
+			# Parse and dispatch
+			var parse_result := _parse_function_call(substituted, body_line_num)
+			if parse_result.error != "":
+				result.error = parse_result.error
+				result.error_line = body_line_num
+				return result
+			
+			if parse_result.func_name != "" and active_mission:
+				var dispatch_error := _dispatch(parse_result.func_name, parse_result.args, body_line_num)
+				if dispatch_error != "":
+					result.error = dispatch_error
+					result.error_line = body_line_num
+					return result
+		
+		# Delay between iterations so kids can watch
+		if iter_val < iterations - 1:
+			await get_tree().create_timer(0.3).timeout
+
+	return result
+
+
+# ========================================================================
+# LUA-STYLE FOR LOOP: for i = 1, 5 do ... end
+# ========================================================================
+
+func _is_lua_for_loop(line: String) -> bool:
 	var lower := line.to_lower().strip_edges()
 	return lower.begins_with("for ") and lower.ends_with(" do")
 
 
-func _execute_for_loop(lines: PackedStringArray, start_index: int) -> Dictionary:
+func _execute_lua_for_loop(lines: PackedStringArray, start_index: int) -> Dictionary:
 	var result := {"error": "", "error_line": start_index + 1, "end_index": start_index}
 	var line := lines[start_index].strip_edges()
 	var line_num := start_index + 1
 
 	# Strip "for " prefix and " do" suffix
 	var inner := line.substr(4).strip_edges()
-	# Find last " do" (case insensitive)
 	var lower_inner := inner.to_lower()
 	var do_pos := lower_inner.rfind(" do")
 	if do_pos == -1:
 		result.error = "Line %d: Every 'for' needs 'do' at the end! Try: for i = 1, 5 do" % line_num
-		result.error_line = line_num
 		return result
 	inner = inner.substr(0, do_pos).strip_edges()
 
@@ -137,17 +530,14 @@ func _execute_for_loop(lines: PackedStringArray, start_index: int) -> Dictionary
 	var eq_pos := inner.find("=")
 	if eq_pos == -1:
 		result.error = "Line %d: For loops need an equals sign: for i = 1, 5 do" % line_num
-		result.error_line = line_num
 		return result
 
 	var var_name := inner.substr(0, eq_pos).strip_edges()
 	var range_str := inner.substr(eq_pos + 1).strip_edges()
 
-	# Check for comma
 	var comma_pos := range_str.find(",")
 	if comma_pos == -1:
 		result.error = "Line %d: For loops need a comma: for i = 1, 5 do" % line_num
-		result.error_line = line_num
 		return result
 
 	var start_str := range_str.substr(0, comma_pos).strip_edges()
@@ -155,7 +545,6 @@ func _execute_for_loop(lines: PackedStringArray, start_index: int) -> Dictionary
 
 	if not start_str.is_valid_int() or not end_str.is_valid_int():
 		result.error = "Line %d: The loop range should be numbers, like: for i = 1, 5 do" % line_num
-		result.error_line = line_num
 		return result
 
 	var loop_start := start_str.to_int()
@@ -164,12 +553,10 @@ func _execute_for_loop(lines: PackedStringArray, start_index: int) -> Dictionary
 
 	if iterations > 20:
 		result.error = "Line %d: That's too many loops! Keep it under 20 to avoid a traffic jam." % line_num
-		result.error_line = line_num
 		return result
 
 	if iterations <= 0:
 		result.error = "Line %d: The second number should be bigger than the first: for i = 1, 5 do" % line_num
-		result.error_line = line_num
 		return result
 
 	# Collect loop body lines until "end"
@@ -189,28 +576,8 @@ func _execute_for_loop(lines: PackedStringArray, start_index: int) -> Dictionary
 		j += 1
 
 	if not end_found:
-		result.error = "Line %d: Almost there! Every loop needs an 'end' at the bottom. Add the word end on its own line." % line_num
-		result.error_line = line_num
+		result.error = "Line %d: Almost there! Every loop needs an 'end' at the bottom." % line_num
 		return result
-
-	# Check if loop variable is used in any body line
-	if body_lines.size() > 0:
-		var var_used := false
-		var has_placeholder := false
-		for bl in body_lines:
-			if _has_variable(bl, var_name):
-				var_used = true
-				break
-			if bl.find("???") != -1:
-				has_placeholder = true
-		if has_placeholder and not var_used:
-			result.error = "Line %d: Replace the ??? with the letter %s — it changes each time the loop runs!" % [body_line_nums[0], var_name]
-			result.error_line = body_line_nums[0]
-			return result
-		if not var_used and not has_placeholder:
-			result.error = "Line %d: All your houses are in the same spot! Use the letter %s to move them. %s changes every time the loop runs!" % [body_line_nums[0], var_name, var_name]
-			result.error_line = body_line_nums[0]
-			return result
 
 	# Execute loop body for each iteration
 	for iter_val in range(loop_start, loop_end + 1):
@@ -220,6 +587,8 @@ func _execute_for_loop(lines: PackedStringArray, start_index: int) -> Dictionary
 
 		for bi in range(body_lines.size()):
 			var substituted := _substitute_loop_var(body_lines[bi], var_name, iter_val)
+			substituted = _substitute_variables(substituted)
+			
 			var parse_result := _parse_function_call(substituted, body_line_nums[bi])
 			if parse_result.error != "":
 				result.error = parse_result.error
@@ -233,27 +602,333 @@ func _execute_for_loop(lines: PackedStringArray, start_index: int) -> Dictionary
 					result.error_line = body_line_nums[bi]
 					return result
 
-		# Delay between iterations so kids can watch
 		if iter_val < loop_end:
 			await get_tree().create_timer(0.3).timeout
 
 	return result
 
 
-func _has_variable(line: String, var_name: String) -> bool:
-	# Check if var_name appears as a standalone identifier in the line
-	var idx := 0
-	while idx < line.length():
-		var pos := line.find(var_name, idx)
-		if pos == -1:
-			return false
-		var before_ok := (pos == 0 or not _is_ident_char(line[pos - 1]))
-		var after_pos := pos + var_name.length()
-		var after_ok := (after_pos >= line.length() or not _is_ident_char(line[after_pos]))
-		if before_ok and after_ok:
-			return true
-		idx = pos + 1
-	return false
+# ========================================================================
+# IF/ELSE CONDITIONALS
+# ========================================================================
+
+func _is_conditional_start(line: String) -> bool:
+	var lower := line.to_lower().strip_edges()
+	return lower.begins_with("if ") and lower.ends_with(":")
+
+
+func _execute_conditional(lines: PackedStringArray, start_index: int) -> Dictionary:
+	var result := {"error": "", "error_line": start_index + 1, "end_index": start_index}
+	var line := lines[start_index].strip_edges()
+	var line_num := start_index + 1
+
+	# Parse condition: if EXPRESSION:
+	var lower := line.to_lower()
+	var if_pos := lower.find("if ") + 3
+	var colon_pos := line.rfind(":")
+	if colon_pos == -1 or colon_pos <= if_pos:
+		result.error = "Line %d: If statements need a colon at the end. Try: if x > 5:" % line_num
+		return result
+	
+	var condition_str := line.substr(if_pos, colon_pos - if_pos).strip_edges()
+	
+	# Evaluate the condition
+	var condition_result = _evaluate_condition(condition_str, line_num)
+	if condition_result is Dictionary and condition_result.has("error"):
+		result.error = condition_result.error
+		return result
+	
+	var condition_true := condition_result as bool
+
+	# Find the if body and else body
+	var base_indent := _get_line_indent(lines[start_index])
+	var if_body_lines := []
+	var if_body_nums := []
+	var else_body_lines := []
+	var else_body_nums := []
+	var in_else := false
+	var end_index := start_index + 1
+	
+	while end_index < lines.size():
+		var body_line := lines[end_index]
+		var stripped := body_line.strip_edges()
+		
+		if stripped.is_empty():
+			end_index += 1
+			continue
+		
+		var body_indent := _get_line_indent(body_line)
+		
+		# Check for else at same indent level as if
+		if not in_else and stripped.to_lower() == "else:" and body_indent == base_indent:
+			in_else = true
+			end_index += 1
+			continue
+		
+		# Check if we've left the block (lower indent)
+		if body_indent <= base_indent and not stripped.begins_with("#"):
+			break
+		
+		if not stripped.begins_with("#"):
+			if in_else:
+				else_body_lines.append(stripped)
+				else_body_nums.append(end_index + 1)
+			else:
+				if_body_lines.append(stripped)
+				if_body_nums.append(end_index + 1)
+		
+		end_index += 1
+	
+	result.end_index = end_index - 1
+	
+	# Execute the appropriate body
+	var body_lines_to_execute: Array
+	var body_nums_to_execute: Array
+	
+	if condition_true:
+		body_lines_to_execute = if_body_lines
+		body_nums_to_execute = if_body_nums
+	else:
+		body_lines_to_execute = else_body_lines
+		body_nums_to_execute = else_body_nums
+	
+	for bi in range(body_lines_to_execute.size()):
+		var body_line := body_lines_to_execute[bi]
+		var body_line_num := body_nums_to_execute[bi]
+		
+		# Substitute variables
+		body_line = _substitute_variables(body_line)
+		
+		# Handle nested loops and conditionals
+		if _is_python_for_loop(body_line):
+			var nested_result = await _execute_python_for_loop(body_lines_to_execute, bi)
+			if nested_result.error != "":
+				result.error = nested_result.error
+				result.error_line = nested_result.error_line
+				return result
+			bi = nested_result.end_index
+			continue
+		
+		if _is_conditional_start(body_line):
+			var cond_result = await _execute_conditional(body_lines_to_execute, bi)
+			if cond_result.error != "":
+				result.error = cond_result.error
+				result.error_line = cond_result.error_line
+				return result
+			bi = cond_result.end_index
+			continue
+		
+		# Parse and dispatch
+		var parse_result := _parse_function_call(body_line, body_line_num)
+		if parse_result.error != "":
+			result.error = parse_result.error
+			result.error_line = body_line_num
+			return result
+		
+		if parse_result.func_name != "" and active_mission:
+			var dispatch_error := _dispatch(parse_result.func_name, parse_result.args, body_line_num)
+			if dispatch_error != "":
+				result.error = dispatch_error
+				result.error_line = body_line_num
+				return result
+	
+	return result
+
+
+func _evaluate_condition(cond_str: String, line_num: int) -> Variant:
+	cond_str = cond_str.strip_edges()
+	
+	# Handle compound conditions with 'and' / 'or'
+	if cond_str.find(" and ") != -1:
+		var parts := cond_str.split(" and ")
+		for part in parts:
+			var result = _evaluate_condition(part.strip_edges(), line_num)
+			if result is Dictionary and result.has("error"):
+				return result
+			if not (result as bool):
+				return false
+		return true
+	
+	if cond_str.find(" or ") != -1:
+		var parts := cond_str.split(" or ")
+		for part in parts:
+			var result = _evaluate_condition(part.strip_edges(), line_num)
+			if result is Dictionary and result.has("error"):
+				return result
+			if result as bool:
+				return true
+		return false
+	
+	# Parse comparison operators
+	var ops := [" >= ", " <= ", " != ", " == ", " > ", " < "]
+	for op in ops:
+		var pos := cond_str.find(op)
+		if pos != -1:
+			var left_str := cond_str.substr(0, pos).strip_edges()
+			var right_str := cond_str.substr(pos + op.length()).strip_edges()
+			
+			var left = _evaluate_expression(left_str, line_num)
+			var right = _evaluate_expression(right_str, line_num)
+			
+			if left is Dictionary and left.has("error"):
+				return left
+			if right is Dictionary and right.has("error"):
+				return right
+			
+			var l := int(left) if left is int else float(left)
+			var r := int(right) if right is int else float(right)
+			
+			match op.strip_edges():
+				">=": return l >= r
+				"<=": return l <= r
+				"!=": return l != r
+				"==": return l == r
+				">": return l > r
+				"<": return l < r
+	
+	# Simple variable or number (truthy check)
+	var val = _evaluate_expression(cond_str, line_num)
+	if val is Dictionary and val.has("error"):
+		return val
+	return bool(val)
+
+
+# ========================================================================
+# FUNCTION DEFINITIONS
+# ========================================================================
+
+func _execute_function_definition(lines: PackedStringArray, start_index: int) -> Dictionary:
+	var result := {"error": "", "error_line": start_index + 1, "end_index": start_index}
+	var line := lines[start_index].strip_edges()
+	var line_num := start_index + 1
+
+	# Parse: function name(params):
+	var func_start := 9  # Skip "function "
+	var colon_pos := line.rfind(":")
+	if colon_pos == -1 or colon_pos <= func_start:
+		result.error = "Line %d: Functions need a colon. Try: function myFunc(x, y):" % line_num
+		return result
+	
+	var signature := line.substr(func_start, colon_pos - func_start).strip_edges()
+	
+	# Extract function name and parameters
+	var paren_open := signature.find("(")
+	var paren_close := signature.rfind(")")
+	
+	if paren_open == -1 or paren_close == -1 or paren_close < paren_open:
+		result.error = "Line %d: Functions need parentheses. Try: function myFunc():" % line_num
+		return result
+	
+	var func_name := signature.substr(0, paren_open).strip_edges()
+	var params_str := signature.substr(paren_open + 1, paren_close - paren_open - 1)
+	var params := []
+	for p in params_str.split(","):
+		var trimmed := p.strip_edges()
+		if not trimmed.is_empty():
+			params.append(trimmed)
+	
+	# Find the function body
+	var base_indent := _get_line_indent(lines[start_index])
+	var body_lines := []
+	var end_index := start_index + 1
+	
+	while end_index < lines.size():
+		var body_line := lines[end_index]
+		if body_line.strip_edges().is_empty():
+			end_index += 1
+			continue
+		
+		var body_indent := _get_line_indent(body_line)
+		if body_indent <= base_indent and not body_line.strip_edges().begins_with("#"):
+			break
+		
+		if not body_line.strip_edges().begins_with("#"):
+			body_lines.append(body_line)
+		end_index += 1
+	
+	result.end_index = end_index - 1
+	
+	# Store the function definition
+	_user_functions[func_name] = {
+		"params": params,
+		"body": body_lines,
+		"line_num": line_num
+	}
+	
+	return result
+
+
+func _execute_user_function(func_name: String, args: Array, line_num: int) -> String:
+	if not _user_functions.has(func_name):
+		return "Line %d: I don't know a function called '%s'. Did you define it first?" % [line_num, func_name]
+	
+	var func_def := _user_functions[func_name]
+	var params: Array = func_def.params
+	var body_lines: Array = func_def.body
+	var func_line_num: int = func_def.line_num
+	
+	# Check argument count
+	if args.size() != params.size():
+		return "Line %d: Function '%s' needs %d arguments, but got %d." % [line_num, func_name, params.size(), args.size()]
+	
+	# Save current variables and create new scope
+	var saved_variables := _variables.duplicate(true)
+	
+	# Bind parameters to arguments
+	for i in range(params.size()):
+		_variables[params[i]] = args[i]
+	
+	# Execute function body
+	for bi in range(body_lines.size()):
+		var body_line := body_lines[bi].strip_edges()
+		if body_line.is_empty() or body_line.begins_with("#"):
+			continue
+		
+		body_line = _substitute_variables(body_line)
+		
+		# Handle nested loops and conditionals
+		if _is_python_for_loop(body_line):
+			var loop_result = await _execute_python_for_loop(body_lines, bi)
+			if loop_result.error != "":
+				_variables = saved_variables
+				return "Line %d: %s" % [loop_result.error_line, loop_result.error]
+			bi = loop_result.end_index
+			continue
+		
+		if _is_conditional_start(body_line):
+			var cond_result = await _execute_conditional(body_lines, bi)
+			if cond_result.error != "":
+				_variables = saved_variables
+				return "Line %d: %s" % [cond_result.error_line, cond_result.error]
+			bi = cond_result.end_index
+			continue
+		
+		# Parse and dispatch
+		var parse_result := _parse_function_call(body_line, func_line_num)
+		if parse_result.error != "":
+			_variables = saved_variables
+			return "Line %d: %s" % [func_line_num, parse_result.error]
+		
+		if parse_result.func_name != "" and active_mission:
+			var dispatch_error := _dispatch(parse_result.func_name, parse_result.args, func_line_num)
+			if dispatch_error != "":
+				_variables = saved_variables
+				return "Line %d: %s" % [func_line_num, dispatch_error]
+	
+	# Restore previous variable scope
+	_variables = saved_variables
+	return ""
+
+
+# ========================================================================
+# UTILITY FUNCTIONS
+# ========================================================================
+
+func _get_line_indent(line: String) -> int:
+	var i := 0
+	while i < line.length() and (line[i] == " " or line[i] == "\t"):
+		i += 1
+	return i
 
 
 func _is_ident_char(c: String) -> bool:
@@ -264,7 +939,6 @@ func _is_ident_char(c: String) -> bool:
 
 
 func _substitute_loop_var(line: String, var_name: String, value: int) -> String:
-	# Replace standalone occurrences of var_name with value (outside quotes)
 	var result := ""
 	var in_string := false
 	var string_char := ""
@@ -301,46 +975,101 @@ func _substitute_loop_var(line: String, var_name: String, value: int) -> String:
 	return result
 
 
-# --- Existing Parsing ---
+# ========================================================================
+# FUNCTION CALL PARSING
+# ========================================================================
 
 func _parse_function_call(line: String, line_num: int) -> Dictionary:
 	var result := {"func_name": "", "args": [], "error": ""}
 
+	# Handle array index access: arr[index]
+	var bracket_pos := line.find("[")
+	var paren_pos := line.find("(")
+	
+	# If there's a bracket before paren, might be array access
+	if bracket_pos != -1 and (paren_pos == -1 or bracket_pos < paren_pos):
+		var arr_name := line.substr(0, bracket_pos).strip_edges()
+		var index_part := ""
+		var closing_bracket := line.find("]", bracket_pos)
+		if closing_bracket != -1:
+			index_part = line.substr(bracket_pos + 1, closing_bracket - bracket_pos - 1)
+			
+			# Check if this is followed by a function call
+			var after_bracket := line.substr(closing_bracket + 1).strip_edges()
+			if after_bracket.begins_with("("):
+				# This is arr[index](args) - array index then function call
+				paren_pos = closing_bracket + 1 + after_bracket.find("(")
+				arr_name = arr_name + line.substr(bracket_pos, closing_bracket - bracket_pos + 1)
+			else:
+				# Simple array index access
+				var index_val = _evaluate_expression(index_part.strip_edges(), line_num)
+				if index_val is Dictionary and index_val.has("error"):
+					result.error = index_val.error
+					return result
+				
+				# Get array from variable
+				if not _variables.has(arr_name):
+					result.error = "Line %d: I don't see an array called '%s'" % [line_num, arr_name]
+					return result
+				
+				var arr: Array = _variables[arr_name]
+				var idx := int(index_val)
+				
+				if idx < 0 or idx >= arr.size():
+					result.error = "Line %d: Index %d is out of range for array of size %d" % [line_num, idx, arr.size()]
+					return result
+				
+				result.values = [arr[idx]]
+				result.func_name = "__array_index__"
+				return result
+
 	# Match pattern: function_name(args)
-	var paren_open := line.find("(")
+	paren_open := paren_pos
+	if paren_open == -1:
+		paren_open = bracket_pos
+	
 	var paren_close := line.rfind(")")
 
 	if paren_open == -1 and paren_close == -1:
-		# Not a function call — check if it looks like an attempt
 		var stripped := line.replace(" ", "").to_lower()
 		for known in known_functions:
 			if stripped.begins_with(known.to_lower()):
 				result.error = "Line %d: Oops! It looks like you forgot the parentheses (). Try: %s(\"house\", 5, 5)" % [line_num, known]
 				return result
-		# Check for typos
 		for typo in _typo_map:
 			if stripped.begins_with(typo):
 				result.error = "Line %d: Almost! Did you mean '%s'? Check your spelling!" % [line_num, _typo_map[typo]]
 				return result
-		# Unknown line — skip silently
 		return result
 
 	if paren_open == -1 or paren_close == -1 or paren_close < paren_open:
-		result.error = "Line %d: Hmm, it looks like you're missing a parenthesis. Make sure you have both ( and )!" % line_num
+		result.error = "Line %d: Hmm, it looks like you're missing a parenthesis." % line_num
 		return result
 
 	var func_name := line.substr(0, paren_open).strip_edges().to_lower()
 	var args_str := line.substr(paren_open + 1, paren_close - paren_open - 1).strip_edges()
 
+	# Check for user-defined functions
+	if _user_functions.has(func_name):
+		var args := _parse_args(args_str, line_num)
+		if args.error != "":
+			result.error = args.error
+			return result
+		# Execute user function and return any error
+		var exec_error := _execute_user_function(func_name, args.values, line_num)
+		if exec_error != "":
+			result.error = exec_error
+			return result
+		return result
+
 	# Check for typos in function name
 	if func_name not in known_functions:
 		if func_name in _typo_map:
-			result.error = "Line %d: Almost! Did you mean '%s'? Check your spelling!" % [line_num, _typo_map[func_name]]
+			result.error = "Line %d: Almost! Did you mean '%s'?" % [line_num, _typo_map[func_name]]
 		else:
-			result.error = "Line %d: I don't know a function called '%s'. Try using place_building(\"house\", 5, 5)" % [line_num, func_name]
+			result.error = "Line %d: I don't know a function called '%s'." % [line_num, func_name]
 		return result
 
-	# Parse arguments
 	var args := _parse_args(args_str, line_num)
 	if args.error != "":
 		result.error = args.error
@@ -363,65 +1092,75 @@ func _parse_args(args_str: String, line_num: int) -> Dictionary:
 		if trimmed.is_empty():
 			continue
 
-		# String argument (quoted)
+		# String argument
 		if (trimmed.begins_with("\"") and trimmed.ends_with("\"")) or \
 		   (trimmed.begins_with("'") and trimmed.ends_with("'")):
 			var str_val := trimmed.substr(1, trimmed.length() - 2)
 			result.values.append(str_val)
 
+		# Array literal
+		elif trimmed.begins_with("[") and trimmed.ends_with("]"):
+			var arr := _parse_array_literal(trimmed, line_num)
+			result.values.append(arr)
+
 		# Check for ??? placeholder
 		elif trimmed.find("???") != -1:
-			result.error = "Line %d: Replace the ??? with the loop variable! Try putting i there instead." % line_num
+			result.error = "Line %d: Replace the ??? with a real value!" % line_num
 			return result
 
-		# Check for unquoted string (common kid mistake)
+		# Unquoted string
 		elif trimmed.to_lower() in ["house", "road", "tree", "grass", "building"]:
-			result.error = "Line %d: Don't forget the quotes! Write \"%s\" with quotation marks around it." % [line_num, trimmed]
+			result.error = "Line %d: Don't forget the quotes! Write \"%s\" with quotation marks." % [line_num, trimmed]
 			return result
 
-		# Number argument
+		# Number
 		elif trimmed.is_valid_int():
 			result.values.append(trimmed.to_int())
 
-		# Simple math expression (after loop var substitution: "2 * 2", "1 + 3")
-		elif _is_simple_math(trimmed):
-			var val = _eval_simple_math(trimmed)
-			if val != null:
-				result.values.append(val)
+		# Math expression
+		elif _is_math_expression(trimmed):
+			var val = _evaluate_math(trimmed, line_num)
+			if val is Dictionary and val.has("error"):
+				result.error = val.error
+				return result
+			result.values.append(val)
+
+		# Variable reference
+		elif _variables.has(trimmed):
+			result.values.append(_variables[trimmed])
+
+		# Array index access in argument
+		elif trimmed.find("[") != -1:
+			var bracket_pos := trimmed.find("[")
+			var arr_name := trimmed.substr(0, bracket_pos)
+			var closing := trimmed.rfind("]")
+			if closing != -1 and _variables.has(arr_name):
+				var index_str := trimmed.substr(bracket_pos + 1, closing - bracket_pos - 1)
+				var index_val = _evaluate_expression(index_str.strip_edges(), line_num)
+				if index_val is Dictionary and index_val.has("error"):
+					result.error = index_val.error
+					return result
+				var arr: Array = _variables[arr_name]
+				var idx := int(index_val)
+				if idx >= 0 and idx < arr.size():
+					result.values.append(arr[idx])
+				else:
+					result.error = "Line %d: Index %d is out of range" % [line_num, idx]
+					return result
 			else:
-				result.error = "Line %d: I can't solve the math in '%s'. Try simpler expressions like i + 1!" % [line_num, trimmed]
+				result.error = "Line %d: I don't understand '%s'" % [line_num, trimmed]
 				return result
 
 		else:
-			result.error = "Line %d: I don't understand '%s'. Make sure strings have \"quotes\" and numbers are just digits!" % [line_num, trimmed]
+			result.error = "Line %d: I don't understand '%s'. Make sure strings have \"quotes\"!" % [line_num, trimmed]
 			return result
 
 	return result
 
 
-func _is_simple_math(s: String) -> bool:
-	for op in [" * ", " + ", " - "]:
-		if s.find(op) != -1:
-			return true
-	return false
-
-
-func _eval_simple_math(s: String) -> Variant:
-	# Try each operator (order: *, +, -)
-	for op in [" * ", " + ", " - "]:
-		var pos := s.find(op)
-		if pos != -1:
-			var left := s.substr(0, pos).strip_edges()
-			var right := s.substr(pos + op.length()).strip_edges()
-			if left.is_valid_int() and right.is_valid_int():
-				var l := left.to_int()
-				var r := right.to_int()
-				match op.strip_edges():
-					"*": return l * r
-					"+": return l + r
-					"-": return l - r
-	return null
-
+# ========================================================================
+# DISPATCH
+# ========================================================================
 
 func _dispatch(func_name: String, args: Array, line_num: int) -> String:
 	if not active_mission:
@@ -431,6 +1170,9 @@ func _dispatch(func_name: String, args: Array, line_num: int) -> String:
 		"place_building":
 			if active_mission.has_method("api_place_building"):
 				return active_mission.api_place_building(args, line_num)
+		"get_city_stat":
+			if active_mission.has_method("api_get_city_stat"):
+				return active_mission.api_get_city_stat(args, line_num)
 		"print":
 			if args.size() >= 1:
 				var msg := str(args[0])

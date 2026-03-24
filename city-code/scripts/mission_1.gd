@@ -291,12 +291,17 @@ func advance_step() -> void:
 
 	var new_step := get_current_step()
 
-	# Clear city between steps, except steps 9->10 persist
-	if old_step.id != 9 or new_step.id != 10:
-		clear_city()
-
+	# Load the new step FIRST so students see what's next
 	_load_current_step()
+	
+	# Emit step advanced signal to update UI
 	step_advanced.emit(new_step.id)
+	
+	# Then clear city (with a small delay so students can see their work)
+	# Except for steps 9->10 which should persist
+	if old_step.id != 9 or new_step.id != 10:
+		await get_tree().create_timer(0.5).timeout
+		clear_city()
 
 
 ## Clears all non-grass buildings from the grid
@@ -388,7 +393,7 @@ func _check_step_success() -> void:
 
 		"code_runs":
 			# Any successful code execution passes
-			call_deferred("advance_step")
+			_announce_step_complete()
 
 		"specific_buildings":
 			# All required buildings must be placed at exact positions
@@ -404,12 +409,12 @@ func _check_step_success() -> void:
 					all_matched = false
 					break
 			if all_matched and required.size() > 0:
-				call_deferred("advance_step")
+				_announce_step_complete()
 
 		"count":
 			# Total buildings placed must meet required_count
 			if placed_buildings.size() >= step.required_count:
-				call_deferred("advance_step")
+				_announce_step_complete()
 
 		"type_count":
 			# Total buildings >= required_count AND distinct types >= required_types
@@ -418,7 +423,20 @@ func _check_step_success() -> void:
 				for b in placed_buildings:
 					types[b.type] = true
 				if types.size() >= step.required_types:
-					call_deferred("advance_step")
+					_announce_step_complete()
+
+
+## Announces step completion with feedback, then advances
+func _announce_step_complete() -> void:
+	var step := get_current_step()
+	var step_title: String = step.get("title", "Step")
+	
+	# Emit celebratory feedback message
+	mission_feedback.emit("🎉 " + step_title + " complete! Great job!")
+	
+	# Small delay to let the message display, then advance
+	await get_tree().create_timer(0.8).timeout
+	advance_step()
 
 
 ## Returns a valid solution string for autotype

@@ -55,6 +55,11 @@ var tutorial_panel: HudMission = null
 
 # State
 var _mission_2_intro_shown := false
+var _mission_3_intro_shown := false
+var _mission_4_intro_shown := false
+var _mission_5_intro_shown := false
+var _mission_6_intro_shown := false
+var _mission_7_intro_shown := false
 var _celebration_callback: Callable = Callable()
 
 
@@ -83,6 +88,11 @@ func _ready() -> void:
 	MissionManager.hint_available.connect(_on_hint)
 	MissionManager.mission_loaded.connect(_on_mission_loaded)
 	MissionManager.mission_2_unlocked.connect(_on_mission_2_unlocked)
+	MissionManager.mission_3_unlocked.connect(_on_mission_3_unlocked)
+	MissionManager.mission_4_unlocked.connect(_on_mission_4_unlocked)
+	MissionManager.mission_5_unlocked.connect(_on_mission_5_unlocked)
+	MissionManager.mission_6_unlocked.connect(_on_mission_6_unlocked)
+	MissionManager.mission_7_unlocked.connect(_on_mission_7_unlocked)
 	MissionManager.bonus_complete.connect(_on_bonus_complete)
 	MissionManager.step_advanced.connect(_on_step_advanced)
 	MissionManager.autotype_solution.connect(_on_autotype_solution)
@@ -90,6 +100,7 @@ func _ready() -> void:
 	if CodeRunner:
 		CodeRunner.loop_iteration.connect(_on_loop_iteration)
 		CodeRunner.code_finished.connect(_on_code_finished)
+		CodeRunner.code_output.connect(_on_code_output)
 
 	dialogue_button.pressed.connect(_on_dialogue_dismiss)
 	celebration_button.pressed.connect(_on_celebration_dismiss)
@@ -751,6 +762,12 @@ func _on_code_finished() -> void:
 			MissionManager.active_mission.check_bonus()
 
 
+func _on_code_output(message: String) -> void:
+	# Display code output messages (like "Code finished running!")
+	_set_feedback_border(COLOR_SAGE)
+	_show_feedback(message, COLOR_SAGE)
+
+
 # ========================================================================
 #  MISSION CALLBACKS
 # ========================================================================
@@ -781,6 +798,13 @@ func _on_mission_loaded(mission: Node) -> void:
 
 
 func _on_step_advanced(step_id: int) -> void:
+	# Flash the feedback panel with success color
+	_set_feedback_border(COLOR_SAGE)
+	_show_feedback("Step complete! Get ready for the next challenge...", COLOR_SAGE)
+	
+	# Brief celebration flash effect
+	_flash_celebration()
+	
 	# Update tutorial panel with new step
 	if tutorial_panel:
 		tutorial_panel.on_step_advanced(step_id)
@@ -798,6 +822,19 @@ func _on_step_advanced(step_id: int) -> void:
 		var dialogue: String = step.get("mayor_dialogue", "")
 		if dialogue != "":
 			_show_dialogue(dialogue)
+
+
+func _flash_celebration() -> void:
+	if not feedback_panel:
+		return
+	
+	# Create a quick flash animation on the feedback panel
+	var tween := create_tween()
+	var original_modulate := feedback_panel.modulate
+	
+	# Flash white briefly
+	tween.tween_property(feedback_panel, "modulate", Color(1.2, 1.5, 1.2, 1.0), 0.1)
+	tween.tween_property(feedback_panel, "modulate", original_modulate, 0.3)
 
 
 func _on_autotype_solution(code_string: String) -> void:
@@ -840,6 +877,26 @@ func _on_mission_2_unlocked() -> void:
 	_show_notification("Mission 2 Unlocked!")
 
 
+func _on_mission_3_unlocked() -> void:
+	_show_notification("Mission 3 Unlocked!")
+
+
+func _on_mission_4_unlocked() -> void:
+	_show_notification("Mission 4 Unlocked!")
+
+
+func _on_mission_5_unlocked() -> void:
+	_show_notification("Mission 5 Unlocked!")
+
+
+func _on_mission_6_unlocked() -> void:
+	_show_notification("Mission 6 Unlocked!")
+
+
+func _on_mission_7_unlocked() -> void:
+	_show_notification("Mission 7 Unlocked!")
+
+
 func _on_hint(hint_text: String, hint_number: int) -> void:
 	if MissionManager.current_mission_id == "m1_first_house":
 		# Show hint in the tutorial panel
@@ -876,6 +933,56 @@ func _start_mission_2() -> void:
 
 	_show_dialogue("Great job on that first house! But look — five more families just arrived!\nWe need five houses in a row. Real coders use [b]LOOPS[/b] to avoid repetition.\nLet me show you how!")
 	_mission_2_intro_shown = true
+
+
+func _start_mission_3() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  Mayor Maple"
+
+	_show_dialogue("Amazing work with loops! Now let's learn about [b]VARIABLES[/b].\nA variable is like a labeled box that stores a value.\nInstead of typing the same number over and over, we can store it once!")
+	_mission_3_intro_shown = true
+
+
+func _start_mission_4() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  Mayor Maple"
+
+	_show_dialogue("Variables are great! But what if you have a whole list of things?\nThat's where [b]ARRAYS[/b] come in — they let you store multiple values in one variable!\nThink of it like a row of labeled boxes.")
+	_mission_4_intro_shown = true
+
+
+func _start_mission_5() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  Mayor Maple"
+
+	_show_dialogue("You're getting good at this! Now for the real power move: [b]NESTED LOOPS[/b]!\nA nested loop is a loop inside a loop.\nThis is how we build grids, patterns, and entire city blocks!")
+	_mission_5_intro_shown = true
+
+
+func _start_mission_6() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  Mayor Maple"
+
+	_show_dialogue("Incredible pattern-building skills! Now let's talk about [b]FUNCTIONS[/b].\nA function is a reusable block of code — like a recipe you can follow anytime.\nOnce you define it, you can use it again and again!")
+	_mission_6_intro_shown = true
+
+
+func _start_mission_7() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  Mayor Maple"
+
+	_show_dialogue("You've learned so much! Now for the final skill: [b]CONDITIONALS[/b]!\nConditionals let your code make decisions. 'If this is true, do that.'\nThis is how smart, responsive programs work!")
+	_mission_7_intro_shown = true
 
 
 func _show_bonus_challenge() -> void:
@@ -942,6 +1049,21 @@ func _on_dialogue_dismiss() -> void:
 	if _mission_2_intro_shown:
 		_mission_2_intro_shown = false
 		MissionManager.load_mission_2()
+	elif _mission_3_intro_shown:
+		_mission_3_intro_shown = false
+		MissionManager.load_mission_3()
+	elif _mission_4_intro_shown:
+		_mission_4_intro_shown = false
+		MissionManager.load_mission_4()
+	elif _mission_5_intro_shown:
+		_mission_5_intro_shown = false
+		MissionManager.load_mission_5()
+	elif _mission_6_intro_shown:
+		_mission_6_intro_shown = false
+		MissionManager.load_mission_6()
+	elif _mission_7_intro_shown:
+		_mission_7_intro_shown = false
+		MissionManager.load_mission_7()
 
 
 func _on_celebration_dismiss() -> void:
@@ -952,9 +1074,25 @@ func _on_celebration_dismiss() -> void:
 		_celebration_callback = Callable()
 		cb.call()
 
-	if MissionManager.current_mission_id == "m1_first_house" and MissionManager.active_mission and MissionManager.active_mission.completed:
-		await get_tree().create_timer(0.5).timeout
-		_start_mission_2()
+	match MissionManager.current_mission_id:
+		"m1_first_house" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_2()
+		"m2_row_of_homes" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_3()
+		"m3_variables" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_4()
+		"m4_arrays" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_5()
+		"m5_nested_loops" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_6()
+		"m6_functions" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_7()
 
 
 func _autotype_code(target_text: String) -> void:

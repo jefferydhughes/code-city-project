@@ -127,8 +127,14 @@ func api_place_building(args: Array, line_num: int) -> String:
 		for p in _placed_houses:
 			unique_x[p.x] = true
 		if unique_x.size() >= REQUIRED_HOUSES:
-			completed = true
-			mission_completed.emit()
+			_announce_mission_complete()
+
+
+func _announce_mission_complete() -> void:
+	completed = true
+	mission_feedback.emit("🎉 Mission Complete! You just built 5 houses with only 3 lines of code!\nThat's the power of loops!")
+	await get_tree().create_timer(1.2).timeout
+	mission_completed.emit()
 
 	return ""
 
@@ -147,7 +153,13 @@ func check_bonus() -> bool:
 				if rows[row_y].size() >= 5:
 					valid_rows += 1
 			if valid_rows >= 2:
-				_bonus_completed = true
-				bonus_complete.emit()
+				_announce_bonus_complete()
 				return true
 	return false
+
+
+func _announce_bonus_complete() -> void:
+	_bonus_completed = true
+	mission_feedback.emit("🏆 BONUS COMPLETE! You built TWO rows of houses!\nYou're a loop master!")
+	await get_tree().create_timer(1.2).timeout
+	bonus_complete.emit()

@@ -9,6 +9,11 @@ signal mission_complete(mission_name: String)
 signal hint_available(hint_text: String, hint_number: int)
 signal mission_loaded(mission: Node)
 signal mission_2_unlocked
+signal mission_3_unlocked
+signal mission_4_unlocked
+signal mission_5_unlocked
+signal mission_6_unlocked
+signal mission_7_unlocked
 signal bonus_complete
 signal step_advanced(step_id: int)
 signal autotype_solution(code_string: String)
@@ -19,13 +24,42 @@ const GRASS_INDEX := 12  # Mesh library index for grass tile
 var MISSION_SCRIPTS := {
 	"m1_first_house": preload("res://scripts/mission_1.gd"),
 	"m2_row_of_homes": preload("res://scripts/mission_2.gd"),
+	"m3_variables": preload("res://scripts/mission_3.gd"),
+	"m4_arrays": preload("res://scripts/mission_4.gd"),
+	"m5_nested_loops": preload("res://scripts/mission_5.gd"),
+	"m6_functions": preload("res://scripts/mission_6.gd"),
+	"m7_conditionals": preload("res://scripts/mission_7.gd"),
 }
 
 # Mission metadata
 var MISSION_META := {
+	"m1_first_house": {
+		"title": "Mission 1: Build Your First City!",
+		"character": "Mayor Maple",
+	},
 	"m2_row_of_homes": {
 		"title": "Mission 2: A Row of Homes",
 		"character": "Builder Bob",
+	},
+	"m3_variables": {
+		"title": "Mission 3: Variables",
+		"character": "Mayor Maple",
+	},
+	"m4_arrays": {
+		"title": "Mission 4: Arrays",
+		"character": "Mayor Maple",
+	},
+	"m5_nested_loops": {
+		"title": "Mission 5: Nested Loops",
+		"character": "Mayor Maple",
+	},
+	"m6_functions": {
+		"title": "Mission 6: Functions",
+		"character": "Mayor Maple",
+	},
+	"m7_conditionals": {
+		"title": "Mission 7: Conditionals",
+		"character": "Mayor Maple",
 	},
 }
 
@@ -102,27 +136,105 @@ func load_mission_1() -> void:
 
 
 func load_mission_2() -> void:
-	# Clear grid and refill with grass
 	if gridmap:
 		gridmap.clear()
 		_fill_grass()
-		# Place 1 starter house at (0,0) as starting state
-		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)  # HOUSE_INDEX = 7
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
 
 	load_mission("m2_row_of_homes")
+
+
+func load_mission_3() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m3_variables")
+
+
+func load_mission_4() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m4_arrays")
+
+
+func load_mission_5() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m5_nested_loops")
+
+
+func load_mission_6() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m6_functions")
+
+
+func load_mission_7() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m7_conditionals")
 
 
 func _on_mission_completed() -> void:
 	mission_complete.emit(active_mission.mission_title)
 
-	# If mission 1 just completed, queue mission 2 unlock
-	if current_mission_id == "m1_first_house":
-		_schedule_mission_2_unlock()
+	match current_mission_id:
+		"m1_first_house":
+			_schedule_mission_2_unlock()
+		"m2_row_of_homes":
+			_schedule_mission_3_unlock()
+		"m3_variables":
+			_schedule_mission_4_unlock()
+		"m4_arrays":
+			_schedule_mission_5_unlock()
+		"m5_nested_loops":
+			_schedule_mission_6_unlock()
+		"m6_functions":
+			_schedule_mission_7_unlock()
 
 
 func _schedule_mission_2_unlock() -> void:
 	await get_tree().create_timer(2.0).timeout
 	mission_2_unlocked.emit()
+
+
+func _schedule_mission_3_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_3_unlocked.emit()
+
+
+func _schedule_mission_4_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_4_unlocked.emit()
+
+
+func _schedule_mission_5_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_5_unlocked.emit()
+
+
+func _schedule_mission_6_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_6_unlocked.emit()
+
+
+func _schedule_mission_7_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_7_unlocked.emit()
 
 
 func _on_mission_feedback(message: String) -> void:
