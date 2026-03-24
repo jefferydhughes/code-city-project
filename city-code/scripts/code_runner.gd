@@ -3,11 +3,15 @@ extends Node
 # CodeRunner — Parses student code line-by-line and dispatches API calls
 # to the active mission node. Supports:
 # - Lua-style for loops: for i = 1, 5 do ... end
-# - Python-style for loops: for i in range(n): ... (NEW)
-# - Variables: var name = value (NEW)
-# - Arrays: ["a", "b", "c"] and arr[index] (NEW)
-# - If/else conditionals (NEW)
-# - Functions: function name(params): ... (NEW)
+# - Python-style for loops: for i in range(n): ...
+# - While loops: while condition: ... (M11)
+# - Dictionaries: {"key": value}, dict["key"] (M8)
+# - Match statements: match var: case _: (M14)
+# - Variables: var name = value
+# - Arrays: ["a", "b", "c"] and arr[index]
+# - If/elif/else conditionals
+# - Functions with return: function name() -> int:
+# - len(), str(), int() built-ins
 
 signal code_started
 signal code_finished
@@ -121,7 +125,33 @@ func run_code(source: String) -> void:
 			code_error.emit("Line %d: Found 'else:' without a matching 'if'!" % line_num, line_num)
 			had_error = true
 			break
-
+		
+		# Check for elif: (must be standalone)
+		if stripped.to_lower().begins_with("elif "):
+			code_error.emit("Line %d: Found 'elif' without a matching 'if'!" % line_num, line_num)
+			had_error = true
+			break
+		
+		# Check for while loop
+		if _is_while_loop(stripped):
+			var loop_result = await _execute_while_loop(lines, i)
+			if loop_result.error != "":
+				code_error.emit(loop_result.error, loop_result.error_line)
+				had_error = true
+				break
+			i = loop_result.end_index + 1
+			continue
+		
+		# Check for match statement
+		if _is_match_statement(stripped):
+			var match_result = await _execute_match(lines, i)
+			if match_result.error != "":
+				code_error.emit(match_result.error, match_result.error_line)
+				had_error = true
+				break
+			i = match_result.end_index + 1
+			continue
+		
 		# Check for stray 'end'
 		if stripped.to_lower() == "end":
 			code_error.emit("Line %d: Found 'end' without a matching block!" % line_num, line_num)
@@ -285,6 +315,10 @@ func _evaluate_expression(expr: String, line_num: int) -> Variant:
 	if expr.begins_with("[") and expr.ends_with("]"):
 		return _parse_array_literal(expr, line_num)
 	
+	# Dictionary literal
+	if expr.begins_with("{") and expr.ends_with("}"):
+		return _parse_dict_literal(expr, line_num)
+	
 	# Boolean
 	if expr.to_lower() == "true":
 		return true
@@ -316,6 +350,66 @@ func _parse_array_literal(expr: String, line_num: int) -> Array:
 		var val = _evaluate_expression(part, line_num)
 		if not (val is Dictionary and val.has("error")):
 			result.append(val)
+	return result
+
+
+func _parse_dict_literal(expr: String, line_num: int) -> Dictionary:
+	var result := {}
+	var inner := expr.substr(1, expr.length() - 2).strip_edges()  # Remove { and }
+	
+	if inner.is_empty():
+		return result
+	
+	var parts := _split_dict_entries(inner)
+	for part in parts:
+		var colon_pos := part.find(":")
+		if colon_pos == -1:
+			continue
+		
+		var key := part.substr(0, colon_pos).strip_edges()
+		var value_str := part.substr(colon_pos + 1).strip_edges()
+		
+		if (key.begins_with("\"") and key.ends_with("\"")) or \
+		   (key.begins_with("'") and key.ends_with("'")):
+			key = key.substr(1, key.length() - 2)
+		
+		var val = _evaluate_expression(value_str, line_num)
+		if not (val is Dictionary and val.has("error")):
+			result[key] = val
+	
+	return result
+
+
+func _split_dict_entries(inner: String) -> Array:
+	var result := []
+	var depth := 0
+	var current := ""
+	var in_string := false
+	var string_char := ""
+	
+	for i in range(inner.length()):
+		var c := inner[i]
+		
+		if not in_string and (c == "\"" or c == "'"):
+			in_string = true
+			string_char = c
+		elif in_string and c == string_char:
+			in_string = false
+		elif not in_string:
+			if c == "{" or c == "[":
+				depth += 1
+			elif c == "}" or c == "]":
+				depth -= 1
+			elif c == "," and depth == 0:
+				result.append(current)
+				current = ""
+				continue
+		
+		current += c
+	
+	if not current.is_empty():
+		result.append(current)
+	
 	return result
 
 
@@ -609,6 +703,273 @@ func _execute_lua_for_loop(lines: PackedStringArray, start_index: int) -> Dictio
 
 
 # ========================================================================
+# WHILE LOOPS (M11)
+# ========================================================================
+
+func _is_while_loop(line: String) -> bool:
+	var lower := line.to_lower().strip_edges()
+	return lower.begins_with("while ") and lower.ends_with(":")
+
+
+func _execute_while_loop(lines: PackedStringArray, start_index: int) -> Dictionary:
+	var result := {"error": "", "error_line": start_index + 1, "end_index": start_index}
+	var line := lines[start_index].strip_edges()
+	var line_num := start_index + 1
+
+	var lower := line.to_lower()
+	var while_pos := lower.find("while ") + 6
+	var colon_pos := line.rfind(":")
+	if colon_pos == -1 or colon_pos <= while_pos:
+		result.error = "Line %d: While loops need a colon. Try: while energy > 0:" % line_num
+		return result
+	
+	var condition_str := line.substr(while_pos, colon_pos - while_pos).strip_edges()
+	var base_indent := _get_line_indent(lines[start_index])
+	
+	var body_lines := []
+	var body_line_nums := []
+	var end_index := start_index + 1
+	
+	while end_index < lines.size():
+		var body_line := lines[end_index]
+		var stripped := body_line.strip_edges()
+		if stripped.is_empty():
+			end_index += 1
+			continue
+		var body_indent := _get_line_indent(body_line)
+		if body_indent <= base_indent and not stripped.begins_with("#"):
+			break
+		if not stripped.begins_with("#"):
+			body_lines.append(stripped)
+			body_line_nums.append(end_index + 1)
+		end_index += 1
+	
+	result.end_index = end_index - 1
+	
+	if body_lines.is_empty():
+		result.error = "Line %d: The loop body is empty! Add some code after the while line." % line_num
+		return result
+	
+	var max_iterations := 100
+	var iteration := 0
+	
+	while iteration < max_iterations:
+		iteration += 1
+		
+		var cond_result = _evaluate_condition(condition_str, line_num)
+		if cond_result is Dictionary and cond_result.has("error"):
+			result.error = cond_result.error
+			return result
+		
+		if not (cond_result as bool):
+			break
+		
+		for bi in range(body_lines.size()):
+			var body_line := body_lines[bi]
+			var body_line_num := body_line_nums[bi]
+			
+			body_line = _substitute_variables(body_line)
+			
+			if body_line.to_lower() == "break":
+				return result
+			
+			if _is_python_for_loop(body_line):
+				var loop_result = await _execute_python_for_loop(body_lines, bi)
+				if loop_result.error != "":
+					result.error = loop_result.error
+					result.error_line = loop_result.error_line
+					return result
+				bi = loop_result.end_index
+				continue
+			
+			if _is_while_loop(body_line):
+				var nested_result = await _execute_while_loop(body_lines, bi)
+				if nested_result.error != "":
+					result.error = nested_result.error
+					result.error_line = nested_result.error_line
+					return result
+				bi = nested_result.end_index
+				continue
+			
+			if _is_conditional_start(body_line):
+				var cond_result2 = await _execute_conditional(body_lines, bi)
+				if cond_result2.error != "":
+					result.error = cond_result2.error
+					result.error_line = cond_result2.error_line
+					return result
+				bi = cond_result2.end_index
+				continue
+			
+			if _is_match_statement(body_line):
+				var match_result = await _execute_match(body_lines, bi)
+				if match_result.error != "":
+					result.error = match_result.error
+					result.error_line = match_result.error_line
+					return result
+				bi = match_result.end_index
+				continue
+			
+			var parse_result := _parse_function_call(body_line, body_line_num)
+			if parse_result.error != "":
+				result.error = parse_result.error
+				result.error_line = body_line_num
+				return result
+			
+			if parse_result.func_name != "" and active_mission:
+				var dispatch_error := _dispatch(parse_result.func_name, parse_result.args, body_line_num)
+				if dispatch_error != "":
+					result.error = dispatch_error
+					result.error_line = body_line_num
+					return result
+		
+		if iteration < max_iterations:
+			await get_tree().create_timer(0.2).timeout
+	
+	if iteration >= max_iterations:
+		result.error = "Line %d: Infinite loop detected! The condition never became false." % line_num
+		return result
+	
+	return result
+
+
+# ========================================================================
+# MATCH STATEMENTS (M14)
+# ========================================================================
+
+func _is_match_statement(line: String) -> bool:
+	var lower := line.to_lower().strip_edges()
+	return lower.begins_with("match ") and lower.ends_with(":")
+
+
+func _execute_match(lines: PackedStringArray, start_index: int) -> Dictionary:
+	var result := {"error": "", "error_line": start_index + 1, "end_index": start_index}
+	var line := lines[start_index].strip_edges()
+	var line_num := start_index + 1
+
+	var lower := line.to_lower()
+	var match_pos := lower.find("match ") + 6
+	var colon_pos := line.rfind(":")
+	if colon_pos == -1 or colon_pos <= match_pos:
+		result.error = "Line %d: Match needs a variable. Try: match state:" % line_num
+		return result
+	
+	var match_var := line.substr(match_pos, colon_pos - match_pos).strip_edges()
+	var match_value = _evaluate_expression(match_var, line_num)
+	if match_value is Dictionary and match_value.has("error"):
+		result.error = match_value.error
+		return result
+	match_value = str(match_value)
+	
+	var base_indent := _get_line_indent(lines[start_index])
+	var cases := []
+	var current_case_value := ""
+	var current_case_body := []
+	var current_case_nums := []
+	var end_index := start_index + 1
+	
+	while end_index < lines.size():
+		var body_line := lines[end_index]
+		var stripped := body_line.strip_edges()
+		if stripped.is_empty():
+			end_index += 1
+			continue
+		var body_indent := _get_line_indent(body_line)
+		if body_indent <= base_indent and not stripped.begins_with("#"):
+			break
+		if stripped.begins_with("_:"):
+			if current_case_value != "":
+				cases.append({"value": current_case_value, "body": current_case_body, "nums": current_case_nums})
+			current_case_body = []
+			current_case_nums = []
+			current_case_value = "_"
+			end_index += 1
+			continue
+		if stripped.ends_with(":"):
+			var case_lower := stripped.to_lower()
+			if case_lower == "_:" or case_lower.begins_with("case "):
+				if current_case_value != "":
+					cases.append({"value": current_case_value, "body": current_case_body, "nums": current_case_nums})
+				current_case_body = []
+				current_case_nums = []
+				if stripped.begins_with("_"):
+					current_case_value = "_"
+				else:
+					var colon_idx := stripped.rfind(":")
+					current_case_value = stripped.substr(5, colon_idx - 5).strip_edges()
+					if (current_case_value.begins_with("\"") and current_case_value.ends_with("\"")) or \
+					   (current_case_value.begins_with("'") and current_case_value.ends_with("'")):
+						current_case_value = current_case_value.substr(1, current_case_value.length() - 2)
+				end_index += 1
+				continue
+		if not stripped.begins_with("#"):
+			current_case_body.append(stripped)
+			current_case_nums.append(end_index + 1)
+		end_index += 1
+	
+	if current_case_value != "":
+		cases.append({"value": current_case_value, "body": current_case_body, "nums": current_case_nums})
+	
+	result.end_index = end_index - 1
+	
+	var matched_case = null
+	for c in cases:
+		if c.value == "_" or c.value == match_value:
+			matched_case = c
+			break
+	
+	if matched_case == null:
+		return result
+	
+	for bi in range(matched_case.body.size()):
+		var body_line := matched_case.body[bi]
+		var body_line_num := matched_case.nums[bi]
+		
+		body_line = _substitute_variables(body_line)
+		
+		if _is_python_for_loop(body_line):
+			var loop_result = await _execute_python_for_loop(matched_case.body, bi)
+			if loop_result.error != "":
+				result.error = loop_result.error
+				result.error_line = loop_result.error_line
+				return result
+			bi = loop_result.end_index
+			continue
+		
+		if _is_conditional_start(body_line):
+			var cond_result = await _execute_conditional(matched_case.body, bi)
+			if cond_result.error != "":
+				result.error = cond_result.error
+				result.error_line = cond_result.error_line
+				return result
+			bi = cond_result.end_index
+			continue
+		
+		if _is_while_loop(body_line):
+			var while_result = await _execute_while_loop(matched_case.body, bi)
+			if while_result.error != "":
+				result.error = while_result.error
+				result.error_line = while_result.error_line
+				return result
+			bi = while_result.end_index
+			continue
+		
+		var parse_result := _parse_function_call(body_line, body_line_num)
+		if parse_result.error != "":
+			result.error = parse_result.error
+			result.error_line = body_line_num
+			return result
+		
+		if parse_result.func_name != "" and active_mission:
+			var dispatch_error := _dispatch(parse_result.func_name, parse_result.args, body_line_num)
+			if dispatch_error != "":
+				result.error = dispatch_error
+				result.error_line = body_line_num
+				return result
+	
+	return result
+
+
+# ========================================================================
 # IF/ELSE CONDITIONALS
 # ========================================================================
 
@@ -622,7 +983,6 @@ func _execute_conditional(lines: PackedStringArray, start_index: int) -> Diction
 	var line := lines[start_index].strip_edges()
 	var line_num := start_index + 1
 
-	# Parse condition: if EXPRESSION:
 	var lower := line.to_lower()
 	var if_pos := lower.find("if ") + 3
 	var colon_pos := line.rfind(":")
@@ -630,24 +990,16 @@ func _execute_conditional(lines: PackedStringArray, start_index: int) -> Diction
 		result.error = "Line %d: If statements need a colon at the end. Try: if x > 5:" % line_num
 		return result
 	
-	var condition_str := line.substr(if_pos, colon_pos - if_pos).strip_edges()
+	var first_condition_str := line.substr(if_pos, colon_pos - if_pos).strip_edges()
 	
-	# Evaluate the condition
-	var condition_result = _evaluate_condition(condition_str, line_num)
-	if condition_result is Dictionary and condition_result.has("error"):
-		result.error = condition_result.error
-		return result
-	
-	var condition_true := condition_result as bool
-
-	# Find the if body and else body
 	var base_indent := _get_line_indent(lines[start_index])
-	var if_body_lines := []
-	var if_body_nums := []
-	var else_body_lines := []
-	var else_body_nums := []
-	var in_else := false
 	var end_index := start_index + 1
+	
+	var branches := []  # Array of {condition, body_lines, body_nums}
+	var current_body_lines := []
+	var current_body_nums := []
+	var in_else := false
+	var found_any_true := false
 	
 	while end_index < lines.size():
 		var body_line := lines[end_index]
@@ -658,50 +1010,81 @@ func _execute_conditional(lines: PackedStringArray, start_index: int) -> Diction
 			continue
 		
 		var body_indent := _get_line_indent(body_line)
+		var stripped_lower := stripped.to_lower()
 		
-		# Check for else at same indent level as if
-		if not in_else and stripped.to_lower() == "else:" and body_indent == base_indent:
+		if stripped_lower == "else:" and body_indent == base_indent:
+			branches.append({"condition": "else", "body": current_body_lines, "nums": current_body_nums})
+			current_body_lines = []
+			current_body_nums = []
 			in_else = true
 			end_index += 1
 			continue
 		
-		# Check if we've left the block (lower indent)
+		if stripped_lower.begins_with("elif ") and body_indent == base_indent:
+			branches.append({"condition": first_condition_str, "body": current_body_lines, "nums": current_body_nums})
+			var elif_colon := stripped.rfind(":")
+			first_condition_str = stripped.substr(5, elif_colon - 5).strip_edges()
+			current_body_lines = []
+			current_body_nums = []
+			end_index += 1
+			continue
+		
 		if body_indent <= base_indent and not stripped.begins_with("#"):
 			break
 		
 		if not stripped.begins_with("#"):
-			if in_else:
-				else_body_lines.append(stripped)
-				else_body_nums.append(end_index + 1)
-			else:
-				if_body_lines.append(stripped)
-				if_body_nums.append(end_index + 1)
+			current_body_lines.append(stripped)
+			current_body_nums.append(end_index + 1)
 		
 		end_index += 1
 	
+	branches.append({"condition": first_condition_str if not in_else else "else", "body": current_body_lines, "nums": current_body_nums})
 	result.end_index = end_index - 1
 	
-	# Execute the appropriate body
-	var body_lines_to_execute: Array
-	var body_nums_to_execute: Array
-	
-	if condition_true:
-		body_lines_to_execute = if_body_lines
-		body_nums_to_execute = if_body_nums
-	else:
-		body_lines_to_execute = else_body_lines
-		body_nums_to_execute = else_body_nums
-	
-	for bi in range(body_lines_to_execute.size()):
-		var body_line := body_lines_to_execute[bi]
-		var body_line_num := body_nums_to_execute[bi]
+	var executed := false
+	for branch in branches:
+		var cond_str = branch.condition
 		
-		# Substitute variables
+		if cond_str == "else":
+			executed = true
+			break
+		
+		var cond_result = _evaluate_condition(cond_str, line_num)
+		if cond_result is Dictionary and cond_result.has("error"):
+			result.error = cond_result.error
+			return result
+		
+		if cond_result as bool:
+			executed = true
+			found_any_true = true
+			break
+	
+	var body_to_execute: Array
+	var nums_to_execute: Array
+	
+	if executed:
+		for branch in branches:
+			if branch.condition == "else":
+				body_to_execute = branch.body
+				nums_to_execute = branch.nums
+				break
+			var cond_result = _evaluate_condition(branch.condition, line_num)
+			if cond_result as bool:
+				body_to_execute = branch.body
+				nums_to_execute = branch.nums
+				break
+	
+	if body_to_execute.is_empty():
+		return result
+	
+	for bi in range(body_to_execute.size()):
+		var body_line := body_to_execute[bi]
+		var body_line_num := nums_to_execute[bi]
+		
 		body_line = _substitute_variables(body_line)
 		
-		# Handle nested loops and conditionals
 		if _is_python_for_loop(body_line):
-			var nested_result = await _execute_python_for_loop(body_lines_to_execute, bi)
+			var nested_result = await _execute_python_for_loop(body_to_execute, bi)
 			if nested_result.error != "":
 				result.error = nested_result.error
 				result.error_line = nested_result.error_line
@@ -710,7 +1093,7 @@ func _execute_conditional(lines: PackedStringArray, start_index: int) -> Diction
 			continue
 		
 		if _is_conditional_start(body_line):
-			var cond_result = await _execute_conditional(body_lines_to_execute, bi)
+			var cond_result = await _execute_conditional(body_to_execute, bi)
 			if cond_result.error != "":
 				result.error = cond_result.error
 				result.error_line = cond_result.error_line
@@ -718,7 +1101,15 @@ func _execute_conditional(lines: PackedStringArray, start_index: int) -> Diction
 			bi = cond_result.end_index
 			continue
 		
-		# Parse and dispatch
+		if _is_match_statement(body_line):
+			var match_result = await _execute_match(body_to_execute, bi)
+			if match_result.error != "":
+				result.error = match_result.error
+				result.error_line = match_result.error_line
+				return result
+			bi = match_result.end_index
+			continue
+		
 		var parse_result := _parse_function_call(body_line, body_line_num)
 		if parse_result.error != "":
 			result.error = parse_result.error
@@ -867,26 +1258,33 @@ func _execute_user_function(func_name: String, args: Array, line_num: int) -> St
 	var body_lines: Array = func_def.body
 	var func_line_num: int = func_def.line_num
 	
-	# Check argument count
 	if args.size() != params.size():
 		return "Line %d: Function '%s' needs %d arguments, but got %d." % [line_num, func_name, params.size(), args.size()]
 	
-	# Save current variables and create new scope
 	var saved_variables := _variables.duplicate(true)
 	
-	# Bind parameters to arguments
 	for i in range(params.size()):
 		_variables[params[i]] = args[i]
 	
-	# Execute function body
 	for bi in range(body_lines.size()):
 		var body_line := body_lines[bi].strip_edges()
 		if body_line.is_empty() or body_line.begins_with("#"):
 			continue
 		
+		if body_line.to_lower().begins_with("return"):
+			var return_val = null
+			var return_str := body_line.substr(6).strip_edges()
+			if not return_str.is_empty():
+				return_val = _evaluate_expression(return_str, func_line_num)
+				if return_val is Dictionary and return_val.has("error"):
+					_variables = saved_variables
+					return "Line %d: %s" % [func_line_num, return_val.error]
+			_variables["__return_value__"] = return_val
+			_variables = saved_variables
+			return ""
+		
 		body_line = _substitute_variables(body_line)
 		
-		# Handle nested loops and conditionals
 		if _is_python_for_loop(body_line):
 			var loop_result = await _execute_python_for_loop(body_lines, bi)
 			if loop_result.error != "":
@@ -903,7 +1301,22 @@ func _execute_user_function(func_name: String, args: Array, line_num: int) -> St
 			bi = cond_result.end_index
 			continue
 		
-		# Parse and dispatch
+		if _is_while_loop(body_line):
+			var while_result = await _execute_while_loop(body_lines, bi)
+			if while_result.error != "":
+				_variables = saved_variables
+				return "Line %d: %s" % [while_result.error_line, while_result.error]
+			bi = while_result.end_index
+			continue
+		
+		if _is_match_statement(body_line):
+			var match_result = await _execute_match(body_lines, bi)
+			if match_result.error != "":
+				_variables = saved_variables
+				return "Line %d: %s" % [match_result.error_line, match_result.error]
+			bi = match_result.end_index
+			continue
+		
 		var parse_result := _parse_function_call(body_line, func_line_num)
 		if parse_result.error != "":
 			_variables = saved_variables
@@ -915,7 +1328,6 @@ func _execute_user_function(func_name: String, args: Array, line_num: int) -> St
 				_variables = saved_variables
 				return "Line %d: %s" % [func_line_num, dispatch_error]
 	
-	# Restore previous variable scope
 	_variables = saved_variables
 	return ""
 
@@ -982,46 +1394,77 @@ func _substitute_loop_var(line: String, var_name: String, value: int) -> String:
 func _parse_function_call(line: String, line_num: int) -> Dictionary:
 	var result := {"func_name": "", "args": [], "error": ""}
 
-	# Handle array index access: arr[index]
+	# Handle array/dict index access: arr[index] or dict["key"]
 	var bracket_pos := line.find("[")
 	var paren_pos := line.find("(")
 	
-	# If there's a bracket before paren, might be array access
+	# If there's a bracket before paren, might be array/dict access
 	if bracket_pos != -1 and (paren_pos == -1 or bracket_pos < paren_pos):
-		var arr_name := line.substr(0, bracket_pos).strip_edges()
+		var var_name := line.substr(0, bracket_pos).strip_edges()
 		var index_part := ""
 		var closing_bracket := line.find("]", bracket_pos)
 		if closing_bracket != -1:
 			index_part = line.substr(bracket_pos + 1, closing_bracket - bracket_pos - 1)
 			
-			# Check if this is followed by a function call
+			# Check if this is followed by a function call or assignment
 			var after_bracket := line.substr(closing_bracket + 1).strip_edges()
-			if after_bracket.begins_with("("):
+			if after_bracket.begins_with("=") and not after_bracket.begins_with("=="):
+				# Dict/array assignment: dict["key"] = value
+				var value_str := after_bracket.substr(1).strip_edges()
+				if not _variables.has(var_name):
+					result.error = "Line %d: I don't see a variable called '%s'" % [line_num, var_name]
+					return result
+				
+				var collection = _variables[var_name]
+				var key_val = _evaluate_expression(index_part.strip_edges(), line_num)
+				if key_val is Dictionary and key_val.has("error"):
+					result.error = key_val.error
+					return result
+				
+				var assign_val = _evaluate_expression(value_str, line_num)
+				if assign_val is Dictionary and assign_val.has("error"):
+					result.error = assign_val.error
+					return result
+				
+				if collection is Dictionary:
+					collection[str(key_val)] = assign_val
+				elif collection is Array:
+					collection[int(key_val)] = assign_val
+				
+				result.func_name = "__dict_assign__"
+				return result
+			elif after_bracket.begins_with("("):
 				# This is arr[index](args) - array index then function call
 				paren_pos = closing_bracket + 1 + after_bracket.find("(")
-				arr_name = arr_name + line.substr(bracket_pos, closing_bracket - bracket_pos + 1)
+				var_name = var_name + line.substr(bracket_pos, closing_bracket - bracket_pos + 1)
 			else:
-				# Simple array index access
+				# Simple array/dict index access
 				var index_val = _evaluate_expression(index_part.strip_edges(), line_num)
 				if index_val is Dictionary and index_val.has("error"):
 					result.error = index_val.error
 					return result
 				
-				# Get array from variable
-				if not _variables.has(arr_name):
-					result.error = "Line %d: I don't see an array called '%s'" % [line_num, arr_name]
+				if not _variables.has(var_name):
+					result.error = "Line %d: I don't see a variable called '%s'" % [line_num, var_name]
 					return result
 				
-				var arr: Array = _variables[arr_name]
-				var idx := int(index_val)
+				var collection = _variables[var_name]
 				
-				if idx < 0 or idx >= arr.size():
-					result.error = "Line %d: Index %d is out of range for array of size %d" % [line_num, idx, arr.size()]
+				if collection is Dictionary:
+					result.values = [collection.get(str(index_val), null)]
+					result.func_name = "__dict_index__"
 					return result
-				
-				result.values = [arr[idx]]
-				result.func_name = "__array_index__"
-				return result
+				elif collection is Array:
+					var idx := int(index_val)
+					if idx < 0 or idx >= collection.size():
+						result.error = "Line %d: Index %d is out of range for array of size %d" % [line_num, idx, collection.size()]
+						return result
+					result.values = [collection[idx]]
+					result.func_name = "__array_index__"
+					return result
+				else:
+					result.error = "Line %d: '%s' is not an array or dictionary" % [line_num, var_name]
+					return result
 
 	# Match pattern: function_name(args)
 	paren_open := paren_pos
@@ -1055,13 +1498,56 @@ func _parse_function_call(line: String, line_num: int) -> Dictionary:
 		if args.error != "":
 			result.error = args.error
 			return result
-		# Execute user function and return any error
 		var exec_error := _execute_user_function(func_name, args.values, line_num)
 		if exec_error != "":
 			result.error = exec_error
 			return result
+		if _variables.has("__return_value__"):
+			result.values = [_variables["__return_value__"]]
+			_variables.erase("__return_value__")
 		return result
-
+	
+	# Built-in functions
+	if func_name == "len":
+		var args := _parse_args(args_str, line_num)
+		if args.error != "":
+			result.error = args.error
+			return result
+		if args.values.size() < 1:
+			result.error = "Line %d: len() needs one argument" % line_num
+			return result
+		var collection = args.values[0]
+		if collection is Array:
+			result.values = [collection.size()]
+		elif collection is Dictionary:
+			result.values = [collection.size()]
+		else:
+			result.error = "Line %d: len() only works on arrays and dictionaries" % line_num
+			return result
+		return result
+	
+	if func_name == "str":
+		var args := _parse_args(args_str, line_num)
+		if args.error != "":
+			result.error = args.error
+			return result
+		if args.values.size() < 1:
+			result.error = "Line %d: str() needs one argument" % line_num
+			return result
+		result.values = [str(args.values[0])]
+		return result
+	
+	if func_name == "int":
+		var args := _parse_args(args_str, line_num)
+		if args.error != "":
+			result.error = args.error
+			return result
+		if args.values.size() < 1:
+			result.error = "Line %d: int() needs one argument" % line_num
+			return result
+		result.values = [int(args.values[0])]
+		return result
+	
 	# Check for typos in function name
 	if func_name not in known_functions:
 		if func_name in _typo_map:

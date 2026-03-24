@@ -14,6 +14,14 @@ signal mission_4_unlocked
 signal mission_5_unlocked
 signal mission_6_unlocked
 signal mission_7_unlocked
+signal mission_8_unlocked
+signal mission_9_unlocked
+signal mission_10_unlocked
+signal mission_11_unlocked
+signal mission_12_unlocked
+signal mission_13_unlocked
+signal mission_14_unlocked
+signal mission_15_unlocked
 signal bonus_complete
 signal step_advanced(step_id: int)
 signal autotype_solution(code_string: String)
@@ -29,6 +37,14 @@ var MISSION_SCRIPTS := {
 	"m5_nested_loops": preload("res://scripts/mission_5.gd"),
 	"m6_functions": preload("res://scripts/mission_6.gd"),
 	"m7_conditionals": preload("res://scripts/mission_7.gd"),
+	"m8_dictionary": preload("res://scripts/mission_8.gd"),
+	"m9_function_factory": preload("res://scripts/mission_9.gd"),
+	"m10_city_census": preload("res://scripts/mission_10.gd"),
+	"m11_weather_system": preload("res://scripts/mission_11.gd"),
+	"m12_event_planner": preload("res://scripts/mission_12.gd"),
+	"m13_happiness_engine": preload("res://scripts/mission_13.gd"),
+	"m14_npc_engine": preload("res://scripts/mission_14.gd"),
+	"m15_autonomous_city": preload("res://scripts/mission_15.gd"),
 }
 
 # Mission metadata
@@ -60,6 +76,54 @@ var MISSION_META := {
 	"m7_conditionals": {
 		"title": "Mission 7: Conditionals",
 		"character": "Mayor Maple",
+	},
+	"m8_dictionary": {
+		"title": "Mission 8: The Dictionary District",
+		"character": "City Elder",
+		"island": 2,
+		"belt": "Yellow",
+	},
+	"m9_function_factory": {
+		"title": "Mission 9: The Function Factory",
+		"character": "City Elder",
+		"island": 2,
+		"belt": "Yellow",
+	},
+	"m10_city_census": {
+		"title": "Mission 10: The City Census",
+		"character": "City Elder",
+		"island": 2,
+		"belt": "Yellow",
+	},
+	"m11_weather_system": {
+		"title": "Mission 11: The Weather System",
+		"character": "City Elder",
+		"island": 2,
+		"belt": "Yellow Advanced",
+	},
+	"m12_event_planner": {
+		"title": "Mission 12: The Event Planner",
+		"character": "City Elder",
+		"island": 2,
+		"belt": "Yellow Advanced",
+	},
+	"m13_happiness_engine": {
+		"title": "Mission 13: The Happiness Engine",
+		"character": "City Elder",
+		"island": 2,
+		"belt": "Green",
+	},
+	"m14_npc_engine": {
+		"title": "Mission 14: The NPC Behavior Engine",
+		"character": "City Elder",
+		"island": 2,
+		"belt": "Green",
+	},
+	"m15_autonomous_city": {
+		"title": "Mission 15: The Autonomous City",
+		"character": "City Elder",
+		"island": 2,
+		"belt": "Green Capstone",
 	},
 }
 
@@ -189,6 +253,78 @@ func load_mission_7() -> void:
 	load_mission("m7_conditionals")
 
 
+func load_mission_8() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m8_dictionary")
+
+
+func load_mission_9() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m9_function_factory")
+
+
+func load_mission_10() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m10_city_census")
+
+
+func load_mission_11() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m11_weather_system")
+
+
+func load_mission_12() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m12_event_planner")
+
+
+func load_mission_13() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m13_happiness_engine")
+
+
+func load_mission_14() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m14_npc_engine")
+
+
+func load_mission_15() -> void:
+	if gridmap:
+		gridmap.clear()
+		_fill_grass()
+		gridmap.set_cell_item(Vector3i(0, 0, 0), 7)
+
+	load_mission("m15_autonomous_city")
+
+
 func _on_mission_completed() -> void:
 	mission_complete.emit(active_mission.mission_title)
 
@@ -205,6 +341,22 @@ func _on_mission_completed() -> void:
 			_schedule_mission_6_unlock()
 		"m6_functions":
 			_schedule_mission_7_unlock()
+		"m7_conditionals":
+			_schedule_mission_8_unlock()
+		"m8_dictionary":
+			_schedule_mission_9_unlock()
+		"m9_function_factory":
+			_schedule_mission_10_unlock()
+		"m10_city_census":
+			_schedule_mission_11_unlock()
+		"m11_weather_system":
+			_schedule_mission_12_unlock()
+		"m12_event_planner":
+			_schedule_mission_13_unlock()
+		"m13_happiness_engine":
+			_schedule_mission_14_unlock()
+		"m14_npc_engine":
+			_schedule_mission_15_unlock()
 
 
 func _schedule_mission_2_unlock() -> void:
@@ -235,6 +387,46 @@ func _schedule_mission_6_unlock() -> void:
 func _schedule_mission_7_unlock() -> void:
 	await get_tree().create_timer(2.0).timeout
 	mission_7_unlocked.emit()
+
+
+func _schedule_mission_8_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_8_unlocked.emit()
+
+
+func _schedule_mission_9_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_9_unlocked.emit()
+
+
+func _schedule_mission_10_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_10_unlocked.emit()
+
+
+func _schedule_mission_11_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_11_unlocked.emit()
+
+
+func _schedule_mission_12_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_12_unlocked.emit()
+
+
+func _schedule_mission_13_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_13_unlocked.emit()
+
+
+func _schedule_mission_14_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_14_unlocked.emit()
+
+
+func _schedule_mission_15_unlock() -> void:
+	await get_tree().create_timer(2.0).timeout
+	mission_15_unlocked.emit()
 
 
 func _on_mission_feedback(message: String) -> void:

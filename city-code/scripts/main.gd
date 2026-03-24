@@ -60,6 +60,14 @@ var _mission_4_intro_shown := false
 var _mission_5_intro_shown := false
 var _mission_6_intro_shown := false
 var _mission_7_intro_shown := false
+var _mission_8_intro_shown := false
+var _mission_9_intro_shown := false
+var _mission_10_intro_shown := false
+var _mission_11_intro_shown := false
+var _mission_12_intro_shown := false
+var _mission_13_intro_shown := false
+var _mission_14_intro_shown := false
+var _mission_15_intro_shown := false
 var _celebration_callback: Callable = Callable()
 
 
@@ -93,6 +101,14 @@ func _ready() -> void:
 	MissionManager.mission_5_unlocked.connect(_on_mission_5_unlocked)
 	MissionManager.mission_6_unlocked.connect(_on_mission_6_unlocked)
 	MissionManager.mission_7_unlocked.connect(_on_mission_7_unlocked)
+	MissionManager.mission_8_unlocked.connect(_on_mission_8_unlocked)
+	MissionManager.mission_9_unlocked.connect(_on_mission_9_unlocked)
+	MissionManager.mission_10_unlocked.connect(_on_mission_10_unlocked)
+	MissionManager.mission_11_unlocked.connect(_on_mission_11_unlocked)
+	MissionManager.mission_12_unlocked.connect(_on_mission_12_unlocked)
+	MissionManager.mission_13_unlocked.connect(_on_mission_13_unlocked)
+	MissionManager.mission_14_unlocked.connect(_on_mission_14_unlocked)
+	MissionManager.mission_15_unlocked.connect(_on_mission_15_unlocked)
 	MissionManager.bonus_complete.connect(_on_bonus_complete)
 	MissionManager.step_advanced.connect(_on_step_advanced)
 	MissionManager.autotype_solution.connect(_on_autotype_solution)
@@ -897,6 +913,38 @@ func _on_mission_7_unlocked() -> void:
 	_show_notification("Mission 7 Unlocked!")
 
 
+func _on_mission_8_unlocked() -> void:
+	_show_notification("Mission 8 Unlocked!")
+
+
+func _on_mission_9_unlocked() -> void:
+	_show_notification("Mission 9 Unlocked!")
+
+
+func _on_mission_10_unlocked() -> void:
+	_show_notification("Mission 10 Unlocked!")
+
+
+func _on_mission_11_unlocked() -> void:
+	_show_notification("Mission 11 Unlocked!")
+
+
+func _on_mission_12_unlocked() -> void:
+	_show_notification("Mission 12 Unlocked!")
+
+
+func _on_mission_13_unlocked() -> void:
+	_show_notification("Mission 13 Unlocked!")
+
+
+func _on_mission_14_unlocked() -> void:
+	_show_notification("Mission 14 Unlocked!")
+
+
+func _on_mission_15_unlocked() -> void:
+	_show_notification("Mission 15 Unlocked!")
+
+
 func _on_hint(hint_text: String, hint_number: int) -> void:
 	if MissionManager.current_mission_id == "m1_first_house":
 		# Show hint in the tutorial panel
@@ -985,6 +1033,86 @@ func _start_mission_7() -> void:
 	_mission_7_intro_shown = true
 
 
+func _start_mission_8() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  City Elder"
+
+	_show_dialogue("Welcome to Island 2! The City Elder speaks: 'Mayor, our shops run blind. We need smarter data storage — dictionaries! Each record holds multiple facts. Let's build the city's memory!'")
+	_mission_8_intro_shown = true
+
+
+func _start_mission_9() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  City Elder"
+
+	_show_dialogue("The City Elder speaks: 'Mayor, your builders repeat themselves endlessly. A function is a blueprint — write it once, use it everywhere. That is efficiency. That is architecture.'")
+	_mission_9_intro_shown = true
+
+
+func _start_mission_10() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  City Elder"
+
+	_show_dialogue("The City Elder speaks: 'The city has grown. But if you cannot read your own city — you are just watching. Today we build the city's memory. Arrays of dictionaries — the foundation of data.'")
+	_mission_10_intro_shown = true
+
+
+func _start_mission_11() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  City Elder"
+
+	_show_dialogue("The City Elder speaks: 'A storm is coming. Not today, not tomorrow. But it will come. A while loop doesn't know when it stops. It just keeps going until the condition changes. That is resilience.'")
+	_mission_11_intro_shown = true
+
+
+func _start_mission_12() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  City Elder"
+
+	_show_dialogue("The City Elder speaks: 'A city is many things running together, each calling on the other. You do not manage each one. You manage the connections. Functions calling functions. That is composition.'")
+	_mission_12_intro_shown = true
+
+
+func _start_mission_13() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  City Elder"
+
+	_show_dialogue("The City Elder speaks: 'Citizens need the RIGHT buildings in the RIGHT places. Your city has rules. Code those rules. Then let the data tell you what to build next. That is a system.'")
+	_mission_13_intro_shown = true
+
+
+func _start_mission_14() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  City Elder"
+
+	_show_dialogue("The City Elder speaks: 'Your citizens wander without purpose. A state machine gives every NPC a brain. What state am I in right now, and what should I do? That single idea powers every game character.'")
+	_mission_14_intro_shown = true
+
+
+func _start_mission_15() -> void:
+	celebration_panel.visible = false
+
+	if dialogue_name:
+		dialogue_name.text = "  City Elder"
+
+	_show_dialogue("The City Elder speaks: 'You have learned every tool the city needs. Now I step back. This city is yours. A master builder does not follow instructions. They make decisions. Show me your city.'")
+	_mission_15_intro_shown = true
+
+
 func _show_bonus_challenge() -> void:
 	if bonus_panel and bonus_label:
 		bonus_label.clear()
@@ -1064,6 +1192,30 @@ func _on_dialogue_dismiss() -> void:
 	elif _mission_7_intro_shown:
 		_mission_7_intro_shown = false
 		MissionManager.load_mission_7()
+	elif _mission_8_intro_shown:
+		_mission_8_intro_shown = false
+		MissionManager.load_mission_8()
+	elif _mission_9_intro_shown:
+		_mission_9_intro_shown = false
+		MissionManager.load_mission_9()
+	elif _mission_10_intro_shown:
+		_mission_10_intro_shown = false
+		MissionManager.load_mission_10()
+	elif _mission_11_intro_shown:
+		_mission_11_intro_shown = false
+		MissionManager.load_mission_11()
+	elif _mission_12_intro_shown:
+		_mission_12_intro_shown = false
+		MissionManager.load_mission_12()
+	elif _mission_13_intro_shown:
+		_mission_13_intro_shown = false
+		MissionManager.load_mission_13()
+	elif _mission_14_intro_shown:
+		_mission_14_intro_shown = false
+		MissionManager.load_mission_14()
+	elif _mission_15_intro_shown:
+		_mission_15_intro_shown = false
+		MissionManager.load_mission_15()
 
 
 func _on_celebration_dismiss() -> void:
@@ -1093,6 +1245,30 @@ func _on_celebration_dismiss() -> void:
 		"m6_functions" if MissionManager.active_mission and MissionManager.active_mission.completed:
 			await get_tree().create_timer(0.5).timeout
 			_start_mission_7()
+		"m7_conditionals" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_8()
+		"m8_dictionary" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_9()
+		"m9_function_factory" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_10()
+		"m10_city_census" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_11()
+		"m11_weather_system" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_12()
+		"m12_event_planner" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_13()
+		"m13_happiness_engine" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_14()
+		"m14_npc_engine" if MissionManager.active_mission and MissionManager.active_mission.completed:
+			await get_tree().create_timer(0.5).timeout
+			_start_mission_15()
 
 
 func _autotype_code(target_text: String) -> void:
